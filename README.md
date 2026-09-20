@@ -96,7 +96,6 @@ Copie-o para `.env.local`.
 | Falta | O que acontece |
 |---|---|
 | Supabase | Modo demo em memória; sem login |
-| `SUPABASE_SERVICE_ROLE_KEY` | Imagens voltam como data URL em vez de irem ao bucket |
 | `OPENAI_API_KEY` | Classificação por heurística; visualização vira flat lay das peças |
 | Teto diário de custo atingido | Look é montado e explicado, sem imagem |
 | Geração de imagem falha | Look aparece com as peças e a explicação |
@@ -107,20 +106,17 @@ Nada disso derruba o fluxo. A tela sempre diz o que aconteceu.
 
 ## Supabase
 
-### 1. Criar o projeto
+O projeto **já existe**: `wardrobe-ai` / `wolglwwxswhhjwugufpi` / `sa-east-1`,
+com as migrations aplicadas, RLS ativa e os 5 buckets privados criados.
 
-```bash
-npx supabase projects create wardrobe-ai --region sa-east-1
-```
-
-### 2. Aplicar o schema
+Para recriar do zero em outro projeto:
 
 ```bash
 npx supabase link --project-ref <REF>
 npx supabase db push
 ```
 
-As três migrations em `supabase/migrations/` criam, nesta ordem:
+As migrations em `supabase/migrations/` criam, nesta ordem:
 
 1. `..._initial_schema.sql` — 9 tabelas, índices e o trigger que cria `public.users` no signup.
 2. `..._rls_policies.sql` — RLS em todas as tabelas; cada pessoa só vê a própria linha.
@@ -151,15 +147,21 @@ users --+-- wardrobe_items ---+
 - Fotos de corpo e guarda-roupa são dados privados. **Nenhum bucket é público.**
 - Acesso a arquivo sempre por URL assinada gerada no servidor.
 - RLS ativa em todas as tabelas; além dela, todo método do repositório filtra por `user_id`.
-- `SUPABASE_SERVICE_ROLE_KEY` e `OPENAI_API_KEY` só existem em código de servidor.
-- Nenhum componente `'use client'` importa segredo.
+- **Não existe service role.** Todo acesso, inclusive upload, usa o cliente
+  autenticado do usuário — uma chave que ignora RLS transformaria qualquer bug de
+  autorização em vazamento entre contas.
+- `OPENAI_API_KEY` só existe em código de servidor, e isso é verificado no bundle.
+- Nenhum componente `'use client'` importa o módulo que lê segredos.
+
+Verificado no projeto real: intruso enxerga 0 de 20 peças; arquivo por URL pública
+retorna 400. Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
 ## Testes
 
 ```bash
-npm test          # 58 testes
+npm test          # 66 testes
 npm run typecheck
 npm run lint
 npm run build
@@ -183,17 +185,21 @@ Todos rodam **offline**, sem Supabase e sem OpenAI.
 
 ## Deploy (Vercel)
 
+O projeto Vercel `wardrobe-ai` já existe, já está vinculado (`.vercel/project.json`)
+e as variáveis do Supabase já estão configuradas nos três ambientes. Falta só:
+
 ```bash
-npx vercel link
-npx vercel env add OPENAI_API_KEY production
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL production
-npx vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
-npx vercel env add SUPABASE_SERVICE_ROLE_KEY production
+npx vercel login
 npx vercel --prod
 ```
 
-Marque as duas chaves privadas como **Sensitive**. A rota `/api/generate-look` declara
-`maxDuration = 120` por causa da geração de imagem.
+Para ligar a IA em produção, acrescente a chave (marque como **Sensitive**):
+
+```bash
+npx vercel env add OPENAI_API_KEY production
+```
+
+A rota `/api/generate-look` declara `maxDuration = 120` por causa da geração de imagem.
 
 ---
 
@@ -220,8 +226,10 @@ A tela informa qual dos dois barrou.
 - Clima é aceito na API e influencia a intenção, mas não há integração meteorológica.
 - Quality Control só faz auditoria visual quando há `OPENAI_API_KEY`; sem ela, a checagem
   é estrutural.
-- O provider OpenAI de imagem não foi exercitado contra a API real nesta entrega
-  (sem chave disponível no ambiente de build).
+- O provider OpenAI de imagem **não foi exercitado contra a API real**: não há
+  `OPENAI_API_KEY` acessível no ambiente. Enquanto isso valem o classificador
+  heurístico e o flat lay determinístico.
+- O deploy ainda não foi feito: a Vercel CLI exige `vercel login` interativo.
 
 Fora de escopo por decisão do PRP: marketplace, pagamento, provador AR, avatar 3D,
 rede social, recomendação de compra.

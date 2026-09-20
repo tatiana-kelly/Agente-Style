@@ -4,282 +4,259 @@
 
 ---
 
-## 1. Resumo
+## STATUS GERAL
 
-MVP funcional de personal stylist com IA, construído do zero. O app sobe, navega,
-classifica peça, monta look com peças reais, explica a escolha, oferece alternativas,
-permite trocar peça e salvar — tudo validado no navegador e coberto por 58 testes.
+**MVP REAL** — Supabase, Auth, Storage, RLS, guarda-roupa, Hermes e persistência
+rodando contra infraestrutura real e verificados com evidência.
 
-Três coisas **não** foram concluídas, todas por dependência externa:
+**Não é "MVP REAL + DEPLOY"**, e não é por falta de tentativa: restam dois
+bloqueios que exigem ação humana — `vercel login` interativo e a `OPENAI_API_KEY`.
 
-| Pendência | Motivo | Quem resolve |
-|---|---|---|
-| Projeto Supabase | Criar custa **US$ 10/mês**; a transação foi bloqueada nesta sessão | Tatiana aprova e cria |
-| `OPENAI_API_KEY` | A chave não está disponível para o agente | Tatiana cola em `.env.local` |
-| Deploy na Vercel | Exige aprovação explícita (regra do CLAUDE.md) | Tatiana autoriza |
-
-Por causa disso, o app foi construído para **funcionar sem nenhuma das três**. Em modo
-demo ele roda com 20 peças fictícias em memória, classificação heurística e visualização
-em flat lay. É software executável hoje, não arquitetura no papel.
+O que ficou fora é nomeado item a item abaixo. Nada foi declarado testado sem ter
+rodado.
 
 ---
 
-## 2. Arquitetura
+## SUPABASE
 
-```
-Browser (Next.js App Router · mobile-first)
-   |
-   v
-POST /api/generate-look
-   |
-   v
-HERMES — orquestrador
-   |
-   +-- Style Agent ....... intenção, ocasião, clima, texto livre
-   +-- Wardrobe Agent .... filtra o armário; garante "só peça real"
-   +-- Outfit Agent ...... 1 principal + 2 alternativas + explicação
-   +-- Image Director .... prompt + referências + negativos de identidade
-   +-- Quality Control ... auditoria; no máximo 2 retries
-   |
-   v
-Repository  →  Supabase  |  memória
-```
-
-### Decisão estrutural que define o produto
-
-`LOOK PLANNING` e `IMAGE RENDERING` são etapas separadas e o plano é **persistido antes**
-de qualquer gasto com imagem. O modelo de imagem recebe a composição fechada; ele nunca
-decide o que vestir. É o que impede o produto de virar um gerador de imagens bonito e
-inútil.
-
-### Decisão de custo
-
-Ordem obedecida em todo o código:
-
-```
-código determinístico > banco > filtros > regras > IA barata > IA de raciocínio > IA de imagem
-```
-
-Harmonia de cores, elegibilidade por estilo, montagem do conjunto, score e **a própria
-explicação do look** são determinísticos. Chamar um modelo para escrever "preto combina
-com branco" seria queimar token à toa.
-
----
-
-## 3. Agentes
-
-| Agente | Arquivo | Usa IA? |
-|---|---|---|
-| Hermes | `src/agents/hermes/index.ts` | não — orquestra |
-| Style Agent | `src/agents/style-agent/index.ts` | não — regex e regras |
-| Wardrobe Agent | `src/agents/wardrobe-agent/index.ts` | não — filtro + score |
-| Outfit Agent | `src/agents/outfit-agent/index.ts` | não — enumeração + score |
-| Image Director | `src/agents/image-director/index.ts` | não — monta o prompt |
-| Quality Control | `src/agents/quality-control/index.ts` | sim, se houver chave |
-
-Só dois pontos do sistema chamam modelo: **classificar a foto da peça** e **gerar/auditar
-a imagem do look**.
-
----
-
-## 4. Banco de dados
-
-9 tabelas em `supabase/migrations/`: `users`, `wardrobe_items`, `user_photos`, `outfits`,
-`outfit_items`, `generated_looks`, `user_preferences`, `ai_usage`, `agent_runs`.
-
-- RLS ativa em todas; política `auth.uid() = user_id`.
-- `outfit_items` não tem `user_id` — a posse é herdada de `outfits` via `exists`.
-- Índices parciais por `user_id + category`, `sport_type` e `formality`, que são exatamente
-  as colunas do pré-filtro determinístico.
-- Trigger `on_auth_user_created` cria a linha em `public.users` no signup.
-- `unique (user_id, preference_type, value)` sustenta o upsert de preferência.
-
-**Status: escritas e revisadas, não aplicadas** — não há projeto Supabase.
-
----
-
-## 5. APIs
-
-| Rota | Método | Função |
-|---|---|---|
-| `/api/generate-look` | POST | Rota principal. Tudo passa pelo Hermes. |
-| `/api/wardrobe` | GET, POST | Listar e cadastrar peça |
-| `/api/wardrobe/[id]` | GET, PATCH, DELETE | Ler, corrigir e remover peça |
-| `/api/wardrobe/classify` | POST | Classificação da foto no upload |
-| `/api/outfits` | GET | Looks salvos, com filtro por estilo |
-| `/api/outfits/[id]` | GET, POST | Detalhe e "salvar look" |
-| `/api/preferences` | GET, POST | Aprendizado por feedback |
-| `/api/profile` | GET, PATCH | Perfil e preferências de estilo |
-| `/api/demo` | POST | Carrega as 20 peças demo em conta real |
-
-Toda rota resolve usuário e driver por `getContext()`. Erro sai sempre no mesmo formato,
-nunca com stack trace.
-
----
-
-## 6. IA utilizada
-
-| Uso | Modelo padrão | Quando roda | Custo estimado |
-|---|---|---|---|
-| Classificar peça | `gpt-5-mini` (visão, `detail: low`) | no upload | ~US$ 0,0005 |
-| Auditar imagem | `gpt-5-mini` (visão) | após gerar | ~US$ 0,0006 |
-| Gerar look | `gpt-image-1` | só se o usuário pedir | ~US$ 0,19 |
-
-Imagem enviada ao classificador é reduzida a 768 px no navegador antes do upload —
-menos payload, menos custo, e o celular não trava subindo 12 MP.
-
-### Freios de custo
-
-- Teto por requisição: US$ 0,50 (`CostBudget`)
-- Teto diário por usuário: US$ 5,00 (consultado em `ai_usage` antes de gerar)
-- Máximo de 2 retries após reprovação do Quality Control
-- Atingido qualquer teto, o look é entregue **sem imagem**, com a explicação do porquê
-
----
-
-## 7. Image generation
-
-`ImageProvider` é a fronteira única (`src/schemas/image.ts`). Duas implementações:
-
-- **`OpenAIImageProvider`** — `images.edit` com múltiplas referências: a foto da pessoa
-  primeiro, as peças em seguida. Prompt com negativos explícitos de preservação de
-  identidade (não alterar rosto, cabelo, proporções; não inventar peça; não cortar o calçado).
-- **`MockImageProvider`** — flat lay SVG determinístico com as cores reais das peças
-  escolhidas. É o que aparece hoje, sem chave.
-
-Trocar para Replicate, Flux ou Google é implementar a interface e mudar uma função.
-
----
-
-## 8. Testes executados
-
-```
-npm test        → 58 passed (7 arquivos)
-npm run typecheck → 0 erros
-npm run lint      → 0 problemas
-npm run build     → sucesso, 16 rotas
-```
-
-Todos os testes rodam **offline**, sem Supabase e sem OpenAI.
-
-Validação manual no navegador (375×812, modo demo):
-
-- Home, guarda-roupa com 20 peças, busca e filtros
-- `/create-look` → "Partida de tênis" + "Tênis" → **Montar meu look**
-- Resultado correto: top esportivo branco + skort branco + tênis de quadra + viseira + raqueteira
-- Explicação gerada, 2 alternativas, botões de feedback
-- **Salvar** → `/outfits` mostra "1 look salvo"
-
----
-
-## 9. Problemas encontrados
-
-1. **Classificação errada de acessório esportivo.** "Viseira rosa de tênis" virava calçado:
-   a palavra genérica "tênis" casava antes das entradas específicas. Encontrado por teste.
-2. **Estado demo não sobrevivia entre rotas.** O look salvo não aparecia em Meus Looks —
-   Next empacota páginas e route handlers separadamente, gerando instâncias distintas do
-   repositório em memória. Encontrado no navegador, não nos testes.
-3. **Imagem mock vinha vazia.** As peças demo não têm foto, então o provider não recebia
-   nada para desenhar.
-4. **Amostras de cor indistinguíveis.** Preto, branco e bege caíam todos na família
-   "neutro" e viravam o mesmo bloco bege no grid.
-5. **`middleware` depreciado** no Next 16.
-6. **`setState` dentro de `useEffect`** no contador de progresso — erro de lint.
-7. **Conflito de peer dependency** entre vitest 5 e `@types/node@20`.
-
-## 10. Problemas resolvidos
-
-1. Ordem de precedência explícita no classificador; "tênis" genérico foi para o fim da lista
-   e `de tênis` passou a qualificar o esporte, não a peça. Comentado no código.
-2. Singleton em `globalThis` para o repositório em memória — padrão do Next para estado
-   de processo. Revalidado no navegador: "1 look salvo".
-3. Novo campo `garments` em `ImageGenerationInput`, sempre preenchido pelo Image Director
-   independente de haver URL. O mock passou a desenhar um flat lay com as cores reais.
-4. Mapa de cor exata antes do mapa de família, com contraste automático da inicial.
-5. Migrado para `proxy.ts` via codemod oficial.
-6. Reset do contador movido para o disparo da requisição.
-7. `@types/node` alinhado em `^22` (resolve o conflito de verdade, sem `--legacy-peer-deps`).
-
-**Nenhum problema ficou em aberto no código entregue.**
-
----
-
-## 11. Variáveis necessárias
-
-Bloco completo em [`docs/ENV.md`](docs/ENV.md).
-
-> O ambiente desta máquina bloqueia criar ou ler qualquer arquivo `.env*` por agente —
-> por isso não existe `.env.example` no repositório. O conteúdo está em `docs/ENV.md`
-> para você copiar para `.env.local`.
-
-Obrigatórias para produção: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`.
-
----
-
-## 12. Deploy
-
-**Não executado** — deploy exige aprovação explícita.
-
-A Vercel está autenticada nesta sessão, no time SAL Express
-(`team_8kU5gZk9UKfHzc1gDCJ3JTWx`). Vale decidir se um produto de consumo deve mesmo
-morar nesse time ou em uma conta pessoal.
-
-```bash
-cd "C:\Projeto ClaudeCode\wardrobe-ai"
-npx vercel link
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL production
-npx vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
-npx vercel env add SUPABASE_SERVICE_ROLE_KEY production
-npx vercel env add OPENAI_API_KEY production
-npx vercel --prod
-```
-
-## 13. URL da aplicação
-
-Não há URL de produção. Localmente: **http://localhost:3000** (`npm run dev`).
-
-## 14. Como executar localmente
-
-```bash
-cd "C:\Projeto ClaudeCode\wardrobe-ai"
-npm install
-npm run dev
-```
-
-Funciona sem configurar nada, em modo demo.
-
----
-
-## 15. Custos estimados
-
-| Item | Custo |
+| Item | Valor |
 |---|---|
-| Supabase (projeto novo) | **US$ 10/mês** — ainda não criado |
-| Classificar uma peça | ~US$ 0,0005 |
-| Montar um look sem imagem | **US$ 0** — é tudo determinístico |
-| Montar um look com imagem | ~US$ 0,19 (+0,0006 de auditoria) |
-| Um usuário cadastrando 50 peças | ~US$ 0,03 |
-| Teto diário por usuário | US$ 5,00 (configurável) |
+| Projeto | `wardrobe-ai` |
+| Ref | `wolglwwxswhhjwugufpi` |
+| Região | `sa-east-1` |
+| URL | `https://wolglwwxswhhjwugufpi.supabase.co` |
+| Status | `ACTIVE_HEALTHY` |
+| Custo | US$ 10/mês (confirmado antes de criar) |
 
-Montar look sem visualização custa zero. Esse foi o desenho, não um acidente.
+### Migrations aplicadas
+
+1. `initial_schema` — 9 tabelas, 21 índices, triggers de `updated_at`, trigger de signup.
+2. `rls_policies` — RLS em todas as tabelas.
+3. `storage_buckets` — 5 buckets privados, 20 policies.
+4. `harden_functions` — correção dos alertas de segurança.
+5. `rename_occasions_to_occasion` — correção de um bug real (abaixo).
+
+### RLS — testada, não apenas configurada
+
+| Teste | Resultado |
+|---|---|
+| Dono lista as próprias peças | 19 |
+| **Intruso lista as peças do dono** | **0** |
+| **Intruso lista os looks do dono** | **0** |
+| Linhas realmente na tabela | 20 |
+
+Feito com dois usuários reais e `request.jwt.claims` trocado dentro da transação.
+
+### Storage — testado
+
+| Teste | Resultado |
+|---|---|
+| Upload autenticado | 201 |
+| Download por URL assinada | 200, `image/jpeg`, 5.834 bytes |
+| Acesso por URL pública | **400** |
+| Acesso com token adulterado | **400** |
+| Valor guardado no banco | `user-photos::<uid>/principal-….jpg` (referência, não URL) |
+
+### Auth — testada
+
+signup (via trigger) → login → sessão → rota protegida → logout → redirect. Todos
+verificados no navegador.
+
+### Advisors de segurança
+
+Primeira execução acusou 3 alertas; todos corrigidos. **Execução final: 0 alertas.**
 
 ---
 
-## 16. Próximas evoluções
+## OPENAI
 
-**Imediato, para destravar o MVP**
+| Item | Situação |
+|---|---|
+| Provider | `OpenAIImageProvider` implementado (`images.edit`, múltiplas referências) |
+| Classificador | Visão implementada, com fallback heurístico |
+| Modelo de imagem | `gpt-image-1` (configurável) |
+| Modelo de texto | `gpt-5-mini` (configurável) |
+| **Geração real testada** | **NÃO** |
+| Custo real gasto | **US$ 0,00** |
 
-1. Aprovar e criar o projeto Supabase; rodar `supabase db push`.
-2. Colar a `OPENAI_API_KEY` e validar a geração real de imagem contra a API — é o único
-   trecho não exercitado em produção.
-3. Decidir o time da Vercel e fazer o primeiro deploy.
+A chave foi procurada em variáveis do shell, arquivos do projeto, diretório do
+usuário e configuração da Vercel. **Não existe em nenhum lugar acessível.**
 
-**Curto prazo**
+Enquanto isso, o sistema usa `MockImageProvider` (flat lay determinístico) e
+classificação heurística. Ambos são explicitamente marcados na interface.
 
-4. Pipeline de normalização de imagem (remoção de fundo, thumbnail, `image_processed_url`).
-5. Integração de clima — a interface já aceita e o Style Agent já reage.
-6. Upload da foto principal do usuário pela tela de perfil.
+---
 
-**Arquitetura já preparada, não implementada** (respeitando o escopo do PRP): agente de
-mala, personal shopping por gaps, look por agenda, WhatsApp.
+## HERMES
+
+```
+HERMES
+├─ Style Agent ........ intenção, ocasião, clima, texto livre   [sem IA]
+├─ Wardrobe Agent ..... pré-filtro determinístico               [sem IA]
+├─ Outfit Agent ....... composição + explicação                 [sem IA]
+│     ↓ PERSISTE O PLANO
+├─ Image Director ..... prompt + referências + negativos        [sem IA]
+└─ Quality Control .... estrutural sempre, visual com chave     [IA barata]
+```
+
+Quatro dos seis passos não chamam modelo nenhum.
+
+### Execução real registrada
+
+```
+agent_runs: hermes | success | 1332 ms | US$ 0,000000
+outfit:  5 peças | confiança 1.0 | explicação de 285 caracteres
+```
+
+Look de tênis escolhido: top esportivo branco + skort branco + tênis de quadra +
+viseira + raqueteira. Look de trabalho: camisa branca + calça alfaiataria +
+scarpin nude + bolsa estruturada.
+
+---
+
+## IMAGEM
+
+| Etapa | Estado |
+|---|---|
+| Input | foto da pessoa + descritores das peças + metadados |
+| Referências | foto primeiro, peças depois |
+| Negativos | não alterar rosto/cabelo/proporções, não inventar peça, não cortar calçado |
+| Geração | mock (sem chave) |
+| QC | estrutural, score 0,750 |
+| Retries | 1 tentativa, sem necessidade de repetir |
+| Armazenamento | `generated-looks::<uid>/….svg` no Storage real |
+
+### A invariante do produto, provada
+
+```
+plano  gravado em 16:00:57.281
+imagem gravada em 16:00:58.088
+plano_antes_da_imagem = true
+```
+
+O modelo de imagem nunca escolhe roupa. Quando ele roda, a composição já está
+decidida e persistida.
+
+---
+
+## TESTES
+
+| Tipo | Quantidade | Resultado |
+|---|---|---|
+| Unitários e integração | 66 | ✅ todos, offline |
+| Typecheck | — | ✅ 0 erros |
+| Lint | — | ✅ 0 problemas |
+| Build de produção | — | ✅ 18 rotas + proxy |
+| E2E manual em stack real | 15 passos | ✅ 11 reais, 4 com ressalva |
+| Segurança (Supabase advisors) | — | ✅ 0 alertas |
+| Segurança (bundle do cliente) | — | ✅ 0 segredos |
+
+---
+
+## DEPLOY
+
+| Item | Valor |
+|---|---|
+| Time Vercel | `tatiana-3292's projects` (**conta pessoal**, única disponível) |
+| Projeto | `wardrobe-ai` — `prj_SN3Ytxm9WOPcPbtYBXJHph63Mnvb` |
+| Variáveis configuradas | 5, nos três ambientes |
+| Vínculo local | `.vercel/project.json` escrito |
+| Build com env real | ✅ validado |
+| **Deploy executado** | **NÃO** |
+| **URL de produção** | **não existe ainda** |
+
+### Por que não deployei — três caminhos avaliados
+
+1. **Vercel CLI** — instalada; `vercel whoami` responde que exige `vercel login`,
+   que abre o navegador. Ação humana inevitável.
+2. **Git** — `create_git_project` exige repositório remoto. O MCP do GitHub não
+   está autenticado, não há remote e push não foi autorizado.
+3. **Deploy inline pela API** — tecnicamente possível, mas exigiria eu retranscrever
+   ~900 KB de código-fonte através de chamadas de ferramenta. Descartado pelo risco
+   de corromper o source silenciosamente; não vale a pena para economizar um login.
+
+---
+
+## CUSTO
+
+| Operação | Custo |
+|---|---|
+| Classificar uma peça (visão) | ~US$ 0,0005 |
+| **Montar um look sem imagem** | **US$ 0,00** |
+| Gerar a imagem do look | ~US$ 0,19 |
+| Auditoria visual do QC | ~US$ 0,0006 |
+| **Total por look com imagem** | **~US$ 0,19** |
+| Cadastrar 50 peças | ~US$ 0,03 |
+| Supabase | US$ 10/mês |
+| **Gasto real nesta sessão** | **US$ 0,00 de IA** + US$ 10/mês de Supabase |
+
+Freios: US$ 0,50 por requisição, US$ 5,00 por usuário por dia, 2 retries no máximo.
+Atingido qualquer teto, o look sai sem imagem e a tela diz o porquê.
+
+---
+
+## PROBLEMAS ENCONTRADOS E CORRIGIDOS NESTA FASE
+
+1. **`occasions` × `occasion`** — a coluna divergia do domínio. Quebrava o insert e,
+   pior, **quebrava a leitura em silêncio**: toda peça voltaria sem ocasião e o
+   filtro por ocasião não valeria nada. Renomeei a coluna; o mapeamento sumiu.
+2. **Erro de banco invisível** — o handler só tratava `Error`; erros do PostgREST
+   são objetos simples, então toda falha de banco virava "Erro interno" sem log.
+   Foi o que escondeu o problema 1.
+3. **Service role desnecessária** — o upload usava uma chave que ignora RLS.
+   Removida do sistema: upload passa pelo cliente autenticado e a RLS autoriza.
+4. **URL assinada no banco** — expiraria em 7 dias, deixando a peça sem foto.
+   Agora o banco guarda `bucket::caminho` e a assinatura é gerada na leitura.
+5. **Data URL no banco** — um JPEG em coluna de texto inviabilizaria listar o
+   guarda-roupa. Agora vai para o Storage.
+6. **Módulo de segredos no bundle do cliente** — `client.ts` importava `@/lib/env`,
+   que lê `OPENAI_API_KEY`. O valor não vazava, mas bastava alguém somar um segredo
+   ao objeto `env` para virar vazamento real. Verificado depois: 0 ocorrências.
+7. **3 alertas do Supabase** — `search_path` mutável e função `SECURITY DEFINER`
+   exposta como RPC pública. Corrigidos; advisors zerados.
+8. **Turbopack subindo de diretório** — pegava o `package-lock.json` da pasta pai.
+9. **Data transbordando no card** — formato encurtado para caber no celular.
+
+---
+
+## BLOQUEIOS RESTANTES
+
+### 1. `OPENAI_API_KEY` — bloqueia IA real
+
+- **Causa:** a chave não existe em nenhum lugar acessível.
+- **Ação humana:** criar `.env.local` na raiz do projeto com `OPENAI_API_KEY=sk-...`
+- **Local:** `C:\Projeto ClaudeCode\wardrobe-ai\.env.local`
+- **Depois:** classificação por visão e geração real de imagem passam a funcionar
+  sem nenhuma mudança de código — só trocam os providers.
+
+### 2. `vercel login` — bloqueia o deploy
+
+- **Causa:** a CLI exige autenticação por navegador.
+- **Ação humana:** em um terminal interativo:
+  ```
+  cd "C:\Projeto ClaudeCode\wardrobe-ai"
+  npx vercel login
+  npx vercel --prod
+  ```
+- **Depois:** o projeto já está criado e vinculado, com as variáveis do Supabase
+  configuradas. O deploy sai direto.
+
+### 3. Foto real e peças reais — bloqueia a validação visual
+
+- **Causa:** não há foto de corpo inteiro nem fotos de roupa no ambiente. Não
+  vasculhei suas fotos pessoais e não usei imagem fictícia para declarar teste real.
+- **Ação humana:** em `/profile`, enviar uma foto de corpo inteiro; em
+  `/wardrobe/add`, fotografar 5 peças (1 top, 1 bottom, 1 tênis, 1 acessório, 1 extra).
+- **Depois:** com a chave da OpenAI, o fluxo do §12 roda ponta a ponta de verdade.
+
+---
+
+## PRÓXIMAS EVOLUÇÕES
+
+1. Pipeline de normalização de imagem (remoção de fundo, `image_processed_url`).
+2. Reaproveitar imagem gerada quando a composição não mudou.
+3. Integração de clima — a interface já aceita e o Style Agent já reage.
+4. Testes E2E automatizados contra o Supabase real, hoje feitos à mão.
+
+Fora de escopo por decisão: marketplace, pagamento, provador AR, avatar 3D, rede
+social, recomendação de compra, WhatsApp, agenda, mala.

@@ -5,8 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** Curto de proposito: "20 de set. de 2026" nao cabe no card em tela de celular. */
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso)
+    .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' })
+    .replace(/\sde\s/g, ' ')
+    .replace('.', '')
 }
 
 export function titleCase(s: string): string {
