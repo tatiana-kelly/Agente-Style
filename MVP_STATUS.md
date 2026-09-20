@@ -2,7 +2,10 @@
 
 Atualizado em 20/09/2026, após a fase de execução real.
 
-**Status geral: MVP REAL — bloqueado no deploy por login interativo da Vercel.**
+**Status geral: MVP REAL DEPLOYADO E VALIDADO EM PRODUCAO.**
+
+Producao: <https://wardrobe-ai-xi-six.vercel.app>
+Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 
 | Área | Status | Evidência |
 |---|---|---|
@@ -23,9 +26,9 @@ Atualizado em 20/09/2026, após a fase de execução real.
 | Preferences | ✅ **real** | 7 preferências em 4 tipos |
 | Tests | ✅ | 66 testes, todos offline |
 | Security | ✅ **auditada** | 0 alertas no Supabase, 0 segredos no bundle do cliente, 0 no histórico git |
-| Performance | ✅ | Look sem imagem = US$ 0; assinatura de URL agrupada por bucket |
 | Build | ✅ | Produção compila com env real, 18 rotas + proxy |
-| Deployment | ⛔ **bloqueado** | Projeto Vercel criado e pré-vinculado; falta `vercel login` |
+| Deployment | ✅ **em produção** | Vercel `gru1`, alias ativo, git conectado (push = deploy) |
+| Performance | ✅ **corrigida** | Região movida para São Paulo: listar 1064 ms → 176 ms |
 
 ## Critério de sucesso do PRP §38
 
@@ -54,14 +57,13 @@ Procurada em: variáveis do shell, arquivos do projeto, `~`, configuração da V
 **Não existe** em nenhum lugar acessível. Sem ela, classificação por visão e geração
 real de imagem ficam sem teste — e eu não vou declarar testado o que não rodou.
 
-### 2. Vercel exige login interativo
-A CLI não está autenticada e `vercel login` abre o navegador. O MCP da Vercel está
-autenticado e foi usado para criar o projeto e as variáveis, mas não expõe uma rota
-de deploy a partir de código local.
+### 2. Foto real e peças reais — resolvido? Não.
+Não há foto de corpo inteiro nem fotos de roupa no ambiente. Não vasculhei fotos
+pessoais e não usei imagem fictícia para declarar teste real. A foto que subiu ao
+Storage foi gerada em canvas, só para exercitar o caminho.
 
-Já preparado: projeto `wardrobe-ai` criado, 5 variáveis configuradas nos três
-ambientes, `.vercel/project.json` escrito (CLI já vinculada), build de produção
-validado com as credenciais reais.
+Para fechar: em `/profile` enviar uma foto de corpo inteiro; em `/wardrobe/add`
+fotografar 5 peças.
 
 ## Conta de teste criada
 

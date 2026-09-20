@@ -3,6 +3,8 @@
 **Vista o que você já tem.** Personal stylist com IA que monta looks usando as peças
 reais do seu guarda-roupa — não roupa de catálogo.
 
+**Produção:** <https://wardrobe-ai-xi-six.vercel.app>
+
 ---
 
 ## O que ele faz
@@ -186,11 +188,14 @@ Todos rodam **offline**, sem Supabase e sem OpenAI.
 
 ## Deploy (Vercel)
 
-O projeto Vercel `wardrobe-ai` já existe, já está vinculado (`.vercel/project.json`)
-e as variáveis do Supabase já estão configuradas nos três ambientes. Falta só:
+Já está no ar, e o repositório está conectado: **todo push para `main` faz deploy**.
+
+As funções rodam em `gru1` (São Paulo), junto do Supabase — sem isso, cada consulta
+pagava a ida e volta até os EUA e listar o guarda-roupa levava 1 segundo.
+
+Deploy manual, se precisar:
 
 ```bash
-npx vercel login
 npx vercel --prod
 ```
 
@@ -229,8 +234,8 @@ A tela informa qual dos dois barrou.
   é estrutural.
 - O provider OpenAI de imagem **não foi exercitado contra a API real**: não há
   `OPENAI_API_KEY` acessível no ambiente. Enquanto isso valem o classificador
-  heurístico e o flat lay determinístico.
-- O deploy ainda não foi feito: a Vercel CLI exige `vercel login` interativo.
+  heurístico e o flat lay determinístico — ambos sinalizados na interface.
+- O fluxo nunca rodou com foto real de pessoa nem foto real de peça.
 
 Fora de escopo por decisão do PRP: marketplace, pagamento, provador AR, avatar 3D,
 rede social, recomendação de compra.
