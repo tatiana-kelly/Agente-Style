@@ -122,7 +122,7 @@ As migrations em `supabase/migrations/` criam, nesta ordem:
 2. `..._rls_policies.sql` — RLS em todas as tabelas; cada pessoa só vê a própria linha.
 3. `..._storage_buckets.sql` — 5 buckets **privados** e as policies por pasta `<user_id>/`.
 
-### 3. Carregar o guarda-roupa demo em uma conta real
+### Carregar o guarda-roupa demo em uma conta real
 
 ```bash
 curl -X POST http://localhost:3000/api/demo
@@ -178,6 +178,7 @@ Cobertura por área:
 | `schemas.test.ts` | Validação de contratos e classificação heurística |
 | `hermes.test.ts` | Roteamento, teto de custo, degradação, troca de peça |
 | `integration.test.ts` | Cadastro → classificação → seleção → geração; aprendizado; smoke completo |
+| `storage-refs.test.ts` | Referência `bucket::caminho`, data URL, rejeição de bucket desconhecido |
 
 Todos rodam **offline**, sem Supabase e sem OpenAI.
 
