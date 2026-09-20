@@ -1,6 +1,7 @@
 import type { WardrobeItem, CreateWardrobeItemInput } from '@/schemas/wardrobe'
 import type { Outfit, OutfitRole, Style } from '@/schemas/outfit'
 import type { UserProfile, UserPreference, UserPhoto } from '@/schemas/user'
+import type { BucketName, StoredImage } from './image-service'
 
 export interface SaveOutfitInput {
   userId: string
@@ -76,6 +77,19 @@ export interface Repository {
 
   listPreferences(userId: string): Promise<UserPreference[]>
   upsertPreference(userId: string, type: string, value: string, weightDelta: number): Promise<UserPreference>
+
+  /**
+   * Grava um binário no Storage do usuário.
+   * Fica no repositório porque é a mesma fronteira de persistência e o mesmo
+   * cliente autenticado — nenhum agente precisa conhecer Supabase para salvar imagem.
+   */
+  storeImage(
+    userId: string,
+    bucket: BucketName,
+    fileName: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<StoredImage>
 
   logAgentRun(record: AgentRunRecord): Promise<void>
   logAiUsage(record: AiUsageRecord): Promise<void>

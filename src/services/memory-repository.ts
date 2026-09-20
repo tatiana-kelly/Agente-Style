@@ -6,6 +6,7 @@ import { buildDemoWardrobe, DEMO_USER_EMAIL, DEMO_USER_ID, DEMO_USER_PHOTO } fro
 import type {
   AgentRunRecord, AiUsageRecord, GeneratedLookRecord, Repository, SaveOutfitInput,
 } from './repository'
+import { inlineImage, type BucketName, type StoredImage } from './image-service'
 
 interface UserState {
   profile: UserProfile
@@ -230,6 +231,17 @@ export class MemoryRepository implements Repository {
     }
     s.preferences.push(created)
     return created
+  }
+
+  async storeImage(
+    _userId: string,
+    _bucket: BucketName,
+    _fileName: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<StoredImage> {
+    // Sem Storage no modo demo: a imagem volta embutida e aparece na tela do mesmo jeito.
+    return inlineImage(data, contentType)
   }
 
   async logAgentRun(record: AgentRunRecord) {

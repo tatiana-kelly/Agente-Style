@@ -9,6 +9,7 @@ import {
 } from '@/schemas/wardrobe'
 import { titleCase } from '@/lib/utils'
 import { occasionLabel } from '@/lib/labels'
+import { downscale } from '@/lib/image-client'
 
 type Step = 'capture' | 'classifying' | 'review' | 'saving'
 
@@ -260,23 +261,3 @@ function suggestName(c: Classification): string {
   return `${titleCase(c.subcategory)} ${c.color}`.trim()
 }
 
-/**
- * Reduz a imagem antes de enviar: menos payload, menos custo de visão,
- * e o celular não trava subindo 12 MP.
- */
-async function downscale(file: File, maxSide: number): Promise<string> {
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
-  const width = Math.round(bitmap.width * scale)
-  const height = Math.round(bitmap.height * scale)
-
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas indisponível neste navegador.')
-  ctx.drawImage(bitmap, 0, 0, width, height)
-  bitmap.close()
-
-  return canvas.toDataURL('image/jpeg', 0.85)
-}

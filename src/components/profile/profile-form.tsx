@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { Camera, Check, Loader2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Camera, Check, Loader2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { UserProfile } from '@/schemas/user'
 import { titleCase } from '@/lib/utils'
+import { downscale } from '@/lib/image-client'
 
 const STYLE_TAGS = ['minimalista', 'clássico', 'esportivo', 'romântico', 'moderno', 'despojado']
 const COLORS = ['preto', 'branco', 'marinho', 'bege', 'cinza', 'verde', 'vinho', 'rosa', 'azul', 'marrom']
@@ -23,6 +24,9 @@ export function ProfileForm({
   const [styles, setStyles] = useState<string[]>(initialProfile?.style_preferences ?? [])
   const [favorite, setFavorite] = useState<string[]>(initialProfile?.favorite_colors ?? [])
   const [avoid, setAvoid] = useState<string[]>(initialProfile?.avoid_colors ?? [])
+  const [photo, setPhoto] = useState(photoUrl)
+  const [uploading, setUploading] = useState(false)
+  const photoInput = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -30,6 +34,27 @@ export function ProfileForm({
   function toggle(list: string[], setter: (v: string[]) => void, value: string) {
     setter(list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
     setSaved(false)
+  }
+
+  async function uploadPhoto(file: File) {
+    setUploading(true)
+    setError(null)
+    try {
+      // 1024 px: a foto da pessoa é a referência de identidade, precisa de mais detalhe que a peça.
+      const image = await downscale(file, 1024, 0.9)
+      const res = await fetch('/api/profile/photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image }),
+      })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error ?? 'Não consegui salvar a foto.')
+      setPhoto(payload.url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao enviar a foto.')
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function save() {
@@ -71,9 +96,9 @@ export function ProfileForm({
       <div className="mt-6 grid gap-6 md:grid-cols-[260px_1fr]">
         <div>
           <div className="aspect-[3/4] overflow-hidden rounded-card bg-ivory">
-            {photoUrl ? (
+            {photo ? (
               // eslint-disable-next-line @next/next/no-img-element -- URL assinada / asset local
-              <img src={photoUrl} alt="Sua foto principal" className="size-full object-cover" />
+              <img src={photo} alt="Sua foto principal" className="size-full object-cover" />
             ) : (
               <div className="flex size-full flex-col items-center justify-center gap-2 text-mist">
                 <Camera className="size-8" strokeWidth={1.4} />
@@ -81,6 +106,23 @@ export function ProfileForm({
               </div>
             )}
           </div>
+          <Button
+            variant="secondary"
+            className="mt-3 w-full"
+            onClick={() => photoInput.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+            {photo ? 'Trocar foto' : 'Enviar foto'}
+          </Button>
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && uploadPhoto(e.target.files[0])}
+          />
+
           <p className="mt-3 text-xs leading-relaxed text-mist">
             Foto de corpo inteiro, luz boa, fundo neutro e roupa simples. É ela que a IA usa para
             preservar sua identidade na visualização do look.

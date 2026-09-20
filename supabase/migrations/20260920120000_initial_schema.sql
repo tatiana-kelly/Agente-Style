@@ -34,7 +34,7 @@ create table if not exists public.wardrobe_items (
   formality            smallint not null default 3 check (formality between 0 and 10),
   sport_type           text not null default 'nenhum',
   season               text[] not null default '{verao,outono,inverno,primavera}',
-  occasions            text[] not null default '{}',
+  occasion             text[] not null default '{}',
   description          text not null default '',
   image_original_url   text,
   image_processed_url  text,

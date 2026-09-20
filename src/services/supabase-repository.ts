@@ -5,6 +5,7 @@ import type { UserPhoto, UserPreference, UserProfile } from '@/schemas/user'
 import type {
   AgentRunRecord, AiUsageRecord, GeneratedLookRecord, Repository, SaveOutfitInput,
 } from './repository'
+import { signRefs, uploadUserFile, type BucketName, type StoredImage } from './image-service'
 
 /**
  * Driver Supabase.
@@ -23,7 +24,23 @@ export class SupabaseRepository implements Repository {
       .eq('active', true)
       .order('created_at', { ascending: false })
     if (error) throw error
-    return (data ?? []) as WardrobeItem[]
+    return this.resolveItemImages((data ?? []) as WardrobeItem[])
+  }
+
+  /** O banco guarda `bucket::caminho`; a UI precisa de URL assinada. */
+  private async resolveItemImages(items: WardrobeItem[]): Promise<WardrobeItem[]> {
+    const signed = await signRefs(
+      this.db,
+      items.flatMap((i) => [i.image_original_url, i.image_processed_url, i.thumbnail_url]),
+    )
+    const swap = (v: string | null) => (v ? (signed.get(v) ?? v) : v)
+
+    return items.map((i) => ({
+      ...i,
+      image_original_url: swap(i.image_original_url),
+      image_processed_url: swap(i.image_processed_url),
+      thumbnail_url: swap(i.thumbnail_url),
+    }))
   }
 
   async getItem(userId: string, id: string): Promise<WardrobeItem | null> {
@@ -34,7 +51,8 @@ export class SupabaseRepository implements Repository {
       .eq('id', id)
       .maybeSingle()
     if (error) throw error
-    return (data as WardrobeItem) ?? null
+    if (!data) return null
+    return (await this.resolveItemImages([data as WardrobeItem]))[0]
   }
 
   async createItem(userId: string, input: CreateWardrobeItemInput): Promise<WardrobeItem> {
@@ -57,7 +75,6 @@ export class SupabaseRepository implements Repository {
       .from('wardrobe_items')
       .insert({
         ...base,
-        occasions: base.occasion,
         user_id: userId,
         name: input.name,
         brand: input.brand ?? null,
@@ -120,7 +137,11 @@ export class SupabaseRepository implements Repository {
       .limit(1)
       .maybeSingle()
     if (error) throw error
-    return (data as UserPhoto) ?? null
+    if (!data) return null
+
+    const photo = data as UserPhoto
+    const signed = await signRefs(this.db, [photo.image_url])
+    return { ...photo, image_url: signed.get(photo.image_url) ?? photo.image_url }
   }
 
   async setPrimaryPhoto(userId: string, imageUrl: string): Promise<UserPhoto> {
@@ -217,7 +238,12 @@ export class SupabaseRepository implements Repository {
       .limit(1)
       .maybeSingle()
     if (error) throw error
-    return (data as GeneratedLookRecord) ?? null
+    if (!data) return null
+
+    const look = data as GeneratedLookRecord
+    if (!look.image_url) return look
+    const signed = await signRefs(this.db, [look.image_url])
+    return { ...look, image_url: signed.get(look.image_url) ?? look.image_url }
   }
 
   async listPreferences(userId: string): Promise<UserPreference[]> {
@@ -247,6 +273,16 @@ export class SupabaseRepository implements Repository {
       .single()
     if (error) throw error
     return data as UserPreference
+  }
+
+  async storeImage(
+    userId: string,
+    bucket: BucketName,
+    fileName: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<StoredImage> {
+    return uploadUserFile(this.db, bucket, userId, fileName, data, contentType)
   }
 
   async logAgentRun(record: AgentRunRecord): Promise<void> {

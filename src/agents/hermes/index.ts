@@ -9,7 +9,7 @@ import { runQualityControl } from '@/agents/quality-control'
 import { getImageProvider } from '@/lib/ai/image-provider'
 import { BudgetExceededError, CostBudget, estimateImageCost } from '@/lib/ai/cost'
 import { env } from '@/lib/env'
-import { BUCKETS, storeImage } from '@/services/image-service'
+import { BUCKETS } from '@/services/image-service'
 
 export interface HermesDeps {
   repo: Repository
@@ -162,7 +162,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       user_id: request.userId,
       outfit_id: saved.id,
       prompt: image.prompt,
-      image_url: image.url,
+      image_url: image.ref,
       model: image.model,
       generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy },
       quality_score: image.qualityScore,
@@ -179,7 +179,10 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
 }
 
 interface RenderOutcome {
+  /** URL assinada, para a resposta HTTP. */
   url: string | null
+  /** `bucket::caminho`, para o banco — URL assinada expiraria em 7 dias. */
+  ref: string | null
   prompt: string
   model: string
   attempts: number
@@ -219,7 +222,7 @@ async function renderWithRetries(args: {
     const cost = estimateImageCost(1)
     if (!budget.canAfford(cost)) {
       return {
-        url: null, prompt: lastPrompt, model: lastModel, attempts: attempt - 1,
+        url: null, ref: null, prompt: lastPrompt, model: lastModel, attempts: attempt - 1,
         issues: lastIssues, qualityScore: 0, checkedBy: 'budget',
         warning: `Orçamento por pedido (US$ ${env.maxRequestCostUsd}) não cobre outra geração.`,
       }
@@ -258,22 +261,23 @@ async function renderWithRetries(args: {
     if (qc.approved && result.image_base64) {
       const contentType = provider.name === 'mock' ? 'image/svg+xml' : 'image/png'
       const ext = provider.name === 'mock' ? 'svg' : 'png'
-      const stored = await storeImage(
-        BUCKETS.generatedLooks,
+      const stored = await repo.storeImage(
         request.userId,
+        BUCKETS.generatedLooks,
         `${Date.now()}.${ext}`,
         Buffer.from(result.image_base64, 'base64'),
         contentType,
       )
       return {
-        url: stored.url, prompt: lastPrompt, model: result.model, attempts: attempt,
+        url: stored.url, ref: stored.ref ?? stored.url,
+        prompt: lastPrompt, model: result.model, attempts: attempt,
         issues: qc.issues, qualityScore: qc.score, checkedBy: qc.checkedBy,
       }
     }
 
     if (!qc.retry) {
       return {
-        url: null, prompt: lastPrompt, model: result.model, attempts: attempt,
+        url: null, ref: null, prompt: lastPrompt, model: result.model, attempts: attempt,
         issues: qc.issues, qualityScore: qc.score, checkedBy: qc.checkedBy,
         warning: qc.issues[0] ?? result.error ?? 'A imagem não passou no controle de qualidade.',
       }
@@ -282,7 +286,7 @@ async function renderWithRetries(args: {
   }
 
   return {
-    url: null, prompt: lastPrompt, model: lastModel, attempts: maxAttempts,
+    url: null, ref: null, prompt: lastPrompt, model: lastModel, attempts: maxAttempts,
     issues: lastIssues, qualityScore: 0, checkedBy: 'exhausted',
     warning: 'Não consegui gerar uma imagem aprovada dentro do limite de tentativas.',
   }
