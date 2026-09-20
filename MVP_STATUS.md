@@ -16,13 +16,13 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | Auth | ✅ **testada** | Login, sessão, rota protegida, logout, redirect pós-logout |
 | Wardrobe | ✅ **real** | CREATE 20, READ, UPDATE, DELETE (soft) contra Supabase |
 | AI classification | ⚠️ heurística | Visão OpenAI implementada, **não exercitada** — sem chave |
-| Hermes | ✅ **real** | Pipeline completo em 2,1 s, `agent_runs` gravado |
+| Hermes | ✅ **real** | Pipeline completo, `agent_runs` gravado; ~620 ms quente em produção |
 | Style Agent | ✅ | Sem custo de IA |
 | Outfit Agent | ✅ **real** | 5 peças reais + 2 alternativas, confiança 1.0 |
 | Image Director | ✅ | Prompt, referências e negativos de identidade |
 | Image generation | ⚠️ mock | `OpenAIImageProvider` implementado, **não exercitado** — sem chave |
 | Quality Control | ⚠️ estrutural | Auditoria visual exige chave; estrutural rodou (score 0,75, 1 tentativa) |
-| Saved Looks | ✅ **real** | 2 looks salvos e listados |
+| Saved Looks | ✅ **real** | 4 looks salvos e listados em produção |
 | Preferences | ✅ **real** | 7 preferências em 4 tipos |
 | Tests | ✅ | 66 testes, todos offline |
 | Security | ✅ **auditada** | 0 alertas no Supabase, 0 segredos no bundle do cliente, 0 no histórico git |
@@ -47,10 +47,11 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | GERAÇÃO DE IMAGEM | ⚠️ mock | Flat lay determinístico, gravado no Storage real |
 | QUALITY CONTROL | ⚠️ estrutural | Aprovou com 0,75 em 1 tentativa |
 | IMAGEM FINAL | ✅ real | URL assinada do bucket `generated-looks` |
+| TROCAR PEÇA | ✅ real | Em produção: scarpin saiu, resto preservado, entrou sapatilha |
 | SALVAR LOOK | ✅ real | status `saved` |
-| MEUS LOOKS | ✅ real | 2 looks listados |
+| MEUS LOOKS | ✅ real | 4 looks listados em produção |
 
-## Bloqueios restantes — ambos exigem ação humana
+## Bloqueios restantes
 
 ### 1. `OPENAI_API_KEY` ausente
 Procurada em: variáveis do shell, arquivos do projeto, `~`, configuração da Vercel.
@@ -67,6 +68,6 @@ fotografar 5 peças.
 
 ## Conta de teste criada
 
-`teste@wardrobe.ai` / `WardrobeTest!2026` — confirmada, com as 19 peças e 2 looks.
+`teste@wardrobe.ai` / `WardrobeTest!2026` — confirmada, com 19 peças e 4 looks.
 Existe também `intruso@wardrobe.ai` / `Intruso!2026`, usada só para provar a RLS.
 Ambas podem ser apagadas no painel do Supabase quando não forem mais úteis.
