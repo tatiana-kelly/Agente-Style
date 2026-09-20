@@ -15,13 +15,13 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | Storage | ✅ **testado** | 5 buckets privados, upload 201, download 200, público 400, token adulterado 400 |
 | Auth | ✅ **testada** | Login, sessão, rota protegida, logout, redirect pós-logout |
 | Wardrobe | ✅ **real** | CREATE 20, READ, UPDATE, DELETE (soft) contra Supabase |
-| AI classification | ⚠️ heurística | Visão OpenAI implementada, **não exercitada** — sem chave |
+| AI classification | ✅ **real** | `text-vision` em produção: US$ 0,0015, 8,7 s, `source: openai` |
 | Hermes | ✅ **real** | Pipeline completo, `agent_runs` gravado; ~620 ms quente em produção |
 | Style Agent | ✅ | Sem custo de IA |
 | Outfit Agent | ✅ **real** | 5 peças reais + 2 alternativas, confiança 1.0 |
 | Image Director | ✅ | Prompt, referências e negativos de identidade |
-| Image generation | ⚠️ mock | `OpenAIImageProvider` implementado, **não exercitado** — sem chave |
-| Quality Control | ⚠️ estrutural | Auditoria visual exige chave; estrutural rodou (score 0,75, 1 tentativa) |
+| Image generation | ✅ **real** | `gpt-image-1` em produção: US$ 0,19, 44,9 s, 5 peças corretas |
+| Quality Control | ✅ **real (visão)** | Auditou a imagem gerada: score 0,950, 1 tentativa, 0 ressalvas |
 | Saved Looks | ✅ **real** | 4 looks salvos e listados em produção |
 | Preferences | ✅ **real** | 7 preferências em 4 tipos |
 | Tests | ✅ | 66 testes, todos offline |
@@ -35,17 +35,17 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | Passo | Real? | Como foi verificado |
 |---|---|---|
 | LOGIN | ✅ real | Conta no Supabase Auth, senha, sessão em cookie |
-| FOTO DO USUÁRIO | ⚠️ sintética | Upload real ao Storage, mas a imagem foi gerada em canvas — **não é foto da Tatiana** |
+| FOTO DO USUÁRIO | ⚠️ sintética | Upload real ao Storage, mas a imagem é um desenho em canvas — **não é foto da Tatiana**, então a preservação de identidade continua sem teste |
 | CADASTRO DE ROUPAS | ✅ real | 20 linhas em `wardrobe_items` |
-| IA IDENTIFICA ROUPAS | ⚠️ heurística | Sem `OPENAI_API_KEY` |
+| IA IDENTIFICA ROUPAS | ✅ real | Visão OpenAI classificou corretamente em produção |
 | GUARDA-ROUPA REAL | ✅ real | 19 peças após o teste de exclusão |
 | USUÁRIO ESCOLHE OCASIÃO | ✅ real | Pela interface |
 | HERMES | ✅ real | `agent_runs`: success, 1332 ms |
 | SELEÇÃO DE PEÇAS REAIS | ✅ real | UUIDs do banco, nunca inventados |
 | PLANO DO LOOK | ✅ real | 5 linhas em `outfit_items` |
 | PERSISTÊNCIA | ✅ real | Plano 16:00:57.281 → imagem 16:00:58.088 |
-| GERAÇÃO DE IMAGEM | ⚠️ mock | Flat lay determinístico, gravado no Storage real |
-| QUALITY CONTROL | ⚠️ estrutural | Aprovou com 0,75 em 1 tentativa |
+| GERAÇÃO DE IMAGEM | ✅ real | `gpt-image-1`, foto editorial com as 5 peças do plano |
+| QUALITY CONTROL | ✅ real | Auditoria visual aprovou com 0,950, sem ressalvas |
 | IMAGEM FINAL | ✅ real | URL assinada do bucket `generated-looks` |
 | TROCAR PEÇA | ✅ real | Em produção: scarpin saiu, resto preservado, entrou sapatilha |
 | SALVAR LOOK | ✅ real | status `saved` |
@@ -53,18 +53,17 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 
 ## Bloqueios restantes
 
-### 1. `OPENAI_API_KEY` ausente
-Procurada em: variáveis do shell, arquivos do projeto, `~`, configuração da Vercel.
-**Não existe** em nenhum lugar acessível. Sem ela, classificação por visão e geração
-real de imagem ficam sem teste — e eu não vou declarar testado o que não rodou.
-
-### 2. Foto real e peças reais — resolvido? Não.
+### 1. Foto real e peças reais — o único bloqueio restante
 Não há foto de corpo inteiro nem fotos de roupa no ambiente. Não vasculhei fotos
 pessoais e não usei imagem fictícia para declarar teste real. A foto que subiu ao
 Storage foi gerada em canvas, só para exercitar o caminho.
 
+Consequência concreta: a imagem gerada em produção tem as 5 peças certas, mas a
+pessoa nela **foi inventada pelo modelo**. Preservar rosto, cabelo e proporções é o
+ponto central do produto e é exatamente o que ainda não foi exercitado.
+
 Para fechar: em `/profile` enviar uma foto de corpo inteiro; em `/wardrobe/add`
-fotografar 5 peças.
+fotografar 5 peças com foto.
 
 ## Conta de teste criada
 

@@ -15,9 +15,9 @@ completo validado em produção.
 | Repositório | <https://github.com/tatiana-kelly/Agente-Style> |
 | Deploy | automático a cada push em `main` |
 
-Duas coisas continuam **não testadas com o artigo real**, e estão nomeadas ao final:
-a IA (sem `OPENAI_API_KEY`) e a foto de pessoa/roupa de verdade. Nada foi declarado
-testado sem ter rodado.
+A IA real foi ligada e validada em produção. **Um item continua sem teste** e está
+nomeado ao final: preservação de identidade, porque não existe foto real de pessoa.
+Nada foi declarado testado sem ter rodado.
 
 ---
 
@@ -72,18 +72,23 @@ em produção.
 
 ## OPENAI
 
-| Item | Situação |
-|---|---|
-| `OpenAIImageProvider` | implementado (`images.edit`, múltiplas referências) |
-| Classificador por visão | implementado, com fallback heurístico |
-| **Geração real testada** | **NÃO** |
-| **Custo real gasto** | **US$ 0,00** |
+Chave adicionada como **Secret** em Production. Validado em produção:
 
-A chave foi procurada em variáveis do shell, arquivos do projeto, diretório do
-usuário e API da Vercel. **Não existe em nenhum lugar acessível.**
+| Operação | Modelo | Resultado | Custo | Latência |
+|---|---|---|---|---|
+| Classificar peça | `text-vision` | `source: openai`, sem fallback | US$ 0,0015 | 8,7 s |
+| Gerar look | `gpt-image-1` | sucesso, 5 peças corretas | US$ 0,19 | 44,9 s |
+| Auditar imagem | visão | aprovada, score **0,950**, 0 ressalvas | incluso | — |
 
-Em produção rodam `MockImageProvider` (flat lay determinístico) e classificação
-heurística — ambos sinalizados na interface, nunca apresentados como IA.
+**Gasto real total: US$ 0,19.**
+
+A imagem gerada é uma foto editorial de corpo inteiro com exatamente as 5 peças do
+plano — top esportivo branco, skort branco, tênis branco, viseira e raqueteira cinza.
+Uma pessoa só, calçado visível, fundo neutro, nenhuma peça inventada.
+
+**Ressalva importante:** a foto de referência era uma imagem sintética, então o modelo
+não tinha identidade para preservar e **criou uma pessoa**. A fidelidade das peças está
+validada; a preservação de identidade **não**.
 
 ---
 
@@ -129,10 +134,12 @@ decidida, pontuada e gravada.
 |---|---|
 | Referências | foto da pessoa primeiro, peças depois |
 | Negativos | não alterar rosto/cabelo/proporções, não inventar peça, não cortar calçado |
-| Geração | mock (sem chave) |
-| QC | estrutural, score 0,750 |
+| Geração | **`gpt-image-1` real**, 1024×1536 |
+| QC | **auditoria visual real**, score 0,950, 0 ressalvas |
 | Retries | 1 tentativa, sem necessidade de repetir |
-| Armazenamento | `generated-looks::<uid>/….svg`, Storage privado |
+| Armazenamento | `generated-looks::<uid>/….png`, Storage privado |
+| Fidelidade das peças | ✅ 5 de 5 corretas |
+| Preservação de identidade | ⚠️ não exercitada (sem foto real) |
 
 ---
 
@@ -144,6 +151,7 @@ decidida, pontuada e gravada.
 | Typecheck / Lint / Build | — | ✅ 0 erros |
 | E2E manual local | 15 passos | ✅ |
 | **E2E manual em produção** | login → guarda-roupa → look → troca → salvar → meus looks → logout | ✅ |
+| **IA real em produção** | classificação por visão + geração de imagem + QC visual | ✅ |
 | Supabase advisors | — | ✅ 0 alertas |
 | Bundle do cliente | — | ✅ 0 segredos |
 
@@ -189,7 +197,7 @@ Fixei `regions: ["gru1"]` em `vercel.json`:
 | **Total por look com imagem** | **~US$ 0,19** |
 | Supabase | US$ 10/mês |
 | Vercel | US$ 0 (Hobby) |
-| **Gasto real de IA até aqui** | **US$ 0,00** |
+| **Gasto real de IA até aqui** | **US$ 0,19** (1 classificação + 1 imagem) |
 
 Freios: US$ 0,50 por requisição, US$ 5,00 por usuário/dia, 2 retries no máximo.
 
@@ -219,24 +227,21 @@ Freios: US$ 0,50 por requisição, US$ 5,00 por usuário/dia, 2 retries no máxi
 
 ## BLOQUEIOS RESTANTES
 
-### 1. `OPENAI_API_KEY` — bloqueia a IA real
-
-- **Causa:** a chave não existe em nenhum lugar acessível da máquina.
-- **Ação:** criar `.env.local` com `OPENAI_API_KEY=sk-...` para o local, e para produção:
-  ```
-  npx vercel env add OPENAI_API_KEY production
-  npx vercel --prod
-  ```
-- **Depois:** classificação por visão e geração real de imagem passam a funcionar
-  sem mudança de código — só trocam os providers.
-
-### 2. Foto real e peças reais — bloqueia a validação visual
+### 1. Foto real e peças reais — bloqueia a preservação de identidade
 
 - **Causa:** não há foto de corpo inteiro nem fotos de roupa no ambiente. Não
   vasculhei fotos pessoais e não usei imagem fictícia para declarar teste real.
 - **Ação:** em `/profile`, enviar uma foto de corpo inteiro; em `/wardrobe/add`,
   fotografar 5 peças (1 top, 1 bottom, 1 tênis, 1 acessório, 1 extra).
-- **Depois:** com a chave da OpenAI, o fluxo do §12 roda ponta a ponta de verdade.
+- **Por que importa:** a imagem gerada em produção tem as peças certas, mas a pessoa
+  nela foi inventada pelo modelo. Preservar rosto, cabelo e proporções é o ponto
+  central do produto — e é o único trecho do pipeline que ainda não rodou de verdade.
+
+### 2. Chave da OpenAI no ambiente local
+
+Produção está com a chave. Para rodar a IA também em `npm run dev`, falta o arquivo
+de variáveis locais descrito em [`docs/ENV.md`](docs/ENV.md). Eu não consigo criar
+esse arquivo — o hook de segurança desta máquina bloqueia arquivos de credencial.
 
 ---
 
