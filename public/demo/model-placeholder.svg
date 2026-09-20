@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-label="Silhueta neutra">
+  <rect width="768" height="1024" fill="#f3ece4"/>
+  <g fill="#d8cec4">
+    <circle cx="384" cy="236" r="86"/>
+    <path d="M384 340c-96 0-150 54-160 140l-18 158h94l14 320h140l14-320h94l-18-158c-10-86-64-140-160-140z"/>
+  </g>
+  <text x="384" y="980" text-anchor="middle" font-family="Georgia, serif" font-size="26" fill="#9a8b82">
+    Foto principal não cadastrada
+  </text>
+</svg>
