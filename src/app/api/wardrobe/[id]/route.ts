@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { getContext } from '@/services/context'
 import { updateWardrobeItemSchema } from '@/schemas/wardrobe'
 import { BUCKETS, dataUrlToBuffer } from '@/services/image-service'
@@ -29,7 +30,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (patch.image_original_url?.startsWith('data:')) {
       const { buffer, contentType } = dataUrlToBuffer(patch.image_original_url)
       const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
-      const fileName = `${Date.now()}.${ext}`
+      const fileName = `${randomUUID()}.${ext}`
 
       const stored = await repo.storeImage(user.id, BUCKETS.wardrobeOriginal, fileName, buffer, contentType)
       const thumb = await repo.storeImage(user.id, BUCKETS.wardrobeThumbnails, fileName, buffer, contentType)

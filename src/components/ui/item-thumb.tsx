@@ -34,13 +34,16 @@ export function ItemThumb({ item, className }: { item: WardrobeItem; className?:
   const url = item.thumbnail_url ?? item.image_processed_url ?? item.image_original_url
 
   if (url) {
+    // Recorte sem fundo é PNG transparente: `cover` cortaria a ponta do sapato.
+    // Inteiro e centrado sobre o tom da página, parece foto de catálogo.
+    const semFundo = Boolean(item.image_processed_url)
     return (
       // eslint-disable-next-line @next/next/no-img-element -- URLs assinadas de host dinâmico
       <img
         src={url}
         alt={item.name}
         loading="lazy"
-        className={cn('size-full object-cover', className)}
+        className={cn(semFundo ? 'size-full bg-ivory object-contain p-[8%]' : 'size-full object-cover', className)}
       />
     )
   }

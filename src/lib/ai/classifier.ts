@@ -1,7 +1,6 @@
 import OpenAI from 'openai'
 import {
   classificationSchema,
-  detectionSchema,
   type Classification,
   type DetectedGarment,
   ALL_SUBCATEGORIES,
@@ -12,6 +11,7 @@ import {
   PATTERNS,
 } from '@/schemas/wardrobe'
 import { env, hasOpenAI } from '@/lib/env'
+import { dedupeByOverlap, normalizeBox, readingOrder } from '@/lib/images/geometry'
 import { approxTokens, estimateTextCost } from './cost'
 
 export interface ClassificationResult {
@@ -23,18 +23,30 @@ export interface ClassificationResult {
   warning?: string
 }
 
+/** Teto por foto. Acima disso a resposta fica longa e as caixas pioram. */
+export const MAX_PECAS_POR_FOTO = 30
+
 const SYSTEM = `Você cataloga peças de roupa para um guarda-roupa digital.
 Responda SOMENTE com JSON válido, sem markdown.
 
-A foto pode conter MAIS DE UMA peça (por exemplo blusa e calça lado a lado).
-Devolva {"items":[...]} com UMA entrada por peça de vestuário distinta.
-Uma peça só na foto = array com um item.
-NÃO conte como peça: cabides, cama, móveis, partes do corpo, sombra, fundo.
-NÃO separe partes da mesma peça (gola, manga, botão são a mesma peça).
-Acrescente "position": onde a peça está na foto, em 2 ou 3 palavras
-(ex: "à esquerda", "em cima", "peça de baixo").
+A foto pode conter MUITAS peças — por exemplo 15 sapatos enfileirados, ou blusa
+e calça lado a lado. Devolva {"items":[...]} com UMA entrada por peça distinta,
+até ${MAX_PECAS_POR_FOTO}. Uma peça só na foto = array com um item.
+
+Regras de contagem:
+- Um PAR de calçados iguais (pé esquerdo + direito) é UMA peça; a caixa cobre o par.
+- Brincos iguais formam UMA peça.
+- NÃO conte: cabides, cama, móveis, partes do corpo, sombra, fundo, etiquetas.
+- NÃO separe partes da mesma peça (gola, manga, alça, botão são a mesma peça).
+
+Para CADA peça, "box": [x, y, w, h] com números de 0 a 1, relativos à imagem
+inteira — x,y = canto superior esquerdo; w,h = largura e altura. A caixa deve ser
+JUSTA em volta da peça, sem incluir peças vizinhas.
+"position": onde está, em 2 ou 3 palavras (ex: "fila de cima, 3º").
 
 Campos de cada item:
+- box: [x, y, w, h] em fração 0..1
+- position: texto curto
 - category: ${CATEGORIES.join(' | ')}
 - subcategory: ${ALL_SUBCATEGORIES.join(' | ')}
 - color: cor dominante em português, uma palavra (ex: preto, branco, marinho, oliva)
@@ -50,8 +62,11 @@ Campos de cada item:
 A subcategory DEVE pertencer à category informada.`
 
 /**
- * Classificação de peça. Modelo barato, não o de raciocínio (PRP §59).
- * Sem chave, cai na heurística: o cadastro nunca trava por falta de IA.
+ * Detecção e classificação de TODAS as peças de uma foto, com a caixa de cada uma.
+ *
+ * Modelo barato, uma chamada só por foto: 15 peças custam o mesmo que uma.
+ * `detail: 'high'` é obrigatório aqui — em 'low' a imagem chega a 512 px, e 15
+ * sapatos viram borrões pequenos demais para caixa precisa.
  */
 export async function classifyGarment(
   imageDataUrl: string,
@@ -84,7 +99,7 @@ export async function classifyGarment(
           role: 'user',
           content: [
             { type: 'text', text: userText },
-            { type: 'image_url', image_url: { url: imageDataUrl, detail: 'low' } },
+            { type: 'image_url', image_url: { url: imageDataUrl, detail: 'high' } },
           ],
         },
       ],
@@ -92,18 +107,33 @@ export async function classifyGarment(
 
     const content = completion.choices[0]?.message?.content ?? '{}'
     const raw = JSON.parse(content)
-    // Aceita tanto {"items":[...]} quanto o objeto solto de uma peça só,
-    // para o schema antigo não quebrar se o modelo responder do jeito velho.
-    const parsed = detectionSchema.safeParse(
-      Array.isArray(raw?.items) ? raw : { items: [raw] },
-    )
+    const brutos: unknown[] = Array.isArray(raw?.items) ? raw.items : [raw]
+
     const usage = completion.usage
     const cost = estimateTextCost(
       usage?.prompt_tokens ?? approxTokens(SYSTEM + userText),
       usage?.completion_tokens ?? 200,
     )
 
-    if (!parsed.success) {
+    // Validação PEÇA A PEÇA: com 15 itens, um campo torto num deles não pode
+    // derrubar os outros 14 para a heurística de uma peça só.
+    const validos: DetectedGarment[] = []
+    let descartados = 0
+    for (const bruto of brutos.slice(0, MAX_PECAS_POR_FOTO)) {
+      const b = bruto as Record<string, unknown>
+      const parsed = classificationSchema.safeParse(b)
+      if (!parsed.success) {
+        descartados++
+        continue
+      }
+      validos.push({
+        ...normalize(parsed.data),
+        position: typeof b?.position === 'string' ? b.position : '',
+        box: normalizeBox(b?.box),
+      })
+    }
+
+    if (validos.length === 0) {
       return {
         items: [single(heuristicClassify(hint ?? ''))],
         source: 'heuristic',
@@ -113,14 +143,25 @@ export async function classifyGarment(
       }
     }
 
-    const items = dedupeGarments(parsed.data.items.map((i) => ({ ...normalize(i), position: i.position })))
+    // Duplicata é o que ocupa o MESMO lugar, não o que tem os mesmos atributos:
+    // 15 sapatos pretos iguais são 15 peças.
+    const items = readingOrder(dedupeByOverlap(validos))
+
+    const avisos: string[] = []
+    if (items.length > 1) avisos.push(`Encontrei ${items.length} peças nesta foto.`)
+    if (descartados > 0) avisos.push(`${descartados} detecção(ões) veio(vieram) incompleta(s) e foi(ram) ignorada(s).`)
+    if (brutos.length > MAX_PECAS_POR_FOTO) {
+      avisos.push(`A foto tem mais de ${MAX_PECAS_POR_FOTO} peças; divida em fotos menores para pegar todas.`)
+    }
+    const semCaixa = items.filter((i) => !i.box).length
+    if (semCaixa > 0) avisos.push(`${semCaixa} peça(s) sem posição definida: vão usar a foto inteira.`)
 
     return {
       items,
       source: 'openai',
       estimated_cost: cost,
       latency_ms: Date.now() - started,
-      warning: items.length > 1 ? `Encontrei ${items.length} peças nesta foto.` : undefined,
+      warning: avisos.length > 0 ? avisos.join(' ') : undefined,
     }
   } catch (error) {
     return {
@@ -137,23 +178,7 @@ export async function classifyGarment(
 }
 
 function single(c: Classification): DetectedGarment {
-  return { ...c, position: '' }
-}
-
-/**
- * Duas entradas com a mesma categoria E subcategoria E cor quase certamente são
- * a mesma peça vista duas vezes — o modelo às vezes separa gola e corpo.
- */
-function dedupeGarments(items: DetectedGarment[]): DetectedGarment[] {
-  const seen = new Set<string>()
-  const out: DetectedGarment[] = []
-  for (const item of items) {
-    const key = `${item.category}|${item.subcategory}|${item.color.toLowerCase()}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(item)
-  }
-  return out
+  return { ...c, position: '', box: null }
 }
 
 /** Garante que a subcategoria pertence à categoria, mesmo se o modelo escorregar. */

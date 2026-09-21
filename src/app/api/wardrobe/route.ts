@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import { getContext } from '@/services/context'
 import { createWardrobeItemSchema } from '@/schemas/wardrobe'
-import { BUCKETS, dataUrlToBuffer } from '@/services/image-service'
+import { BUCKETS, dataUrlToBuffer, type BucketName } from '@/services/image-service'
+import type { Repository } from '@/services/repository'
 import { fail, ok } from '../_lib/handler'
 
 export async function GET() {
@@ -13,33 +15,58 @@ export async function GET() {
   }
 }
 
+/**
+ * Grava um data URL no bucket e devolve a referência.
+ *
+ * Nome com UUID, nunca `Date.now()`: no cadastro em lote três peças sobem ao
+ * mesmo tempo, e com `upsert` dois uploads no mesmo milissegundo gravavam no
+ * mesmo arquivo — uma peça sobrescrevia a foto da outra.
+ */
+async function guardar(
+  repo: Repository,
+  userId: string,
+  bucket: BucketName,
+  dataUrl: string,
+  base: string,
+): Promise<string> {
+  const { buffer, contentType } = dataUrlToBuffer(dataUrl)
+  const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
+  const stored = await repo.storeImage(userId, bucket, `${base}.${ext}`, buffer, contentType)
+  return stored.ref ?? stored.url
+}
+
 export async function POST(request: Request) {
   try {
     const { user, repo } = await getContext()
     const input = createWardrobeItemSchema.parse(await request.json())
+    const base = randomUUID()
 
-    // A tela manda a foto como data URL. Ela vai para o Storage privado;
-    // o banco fica com a referência, não com o binário.
-    let imageRef: string | undefined
-    let thumbRef: string | undefined
+    // Cada peça grava o SEU recorte. O banco fica com referências, não binário.
+    const original = input.image_original_url?.startsWith('data:')
+      ? await guardar(repo, user.id, BUCKETS.wardrobeOriginal, input.image_original_url, base)
+      : input.image_original_url
 
-    if (input.image_original_url?.startsWith('data:')) {
-      const { buffer, contentType } = dataUrlToBuffer(input.image_original_url)
-      const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
-      const fileName = `${Date.now()}.${ext}`
+    // Versão sem fundo, quando o navegador conseguiu remover. Vai para o bucket
+    // de processadas — que existia desde o início e nunca tinha sido usado.
+    const processada = input.image_processed_url?.startsWith('data:')
+      ? await guardar(repo, user.id, BUCKETS.wardrobeProcessed, input.image_processed_url, base)
+      : input.image_processed_url
 
-      const stored = await repo.storeImage(user.id, BUCKETS.wardrobeOriginal, fileName, buffer, contentType)
-      imageRef = stored.ref ?? stored.url
-
-      // O MVP ainda não processa a imagem; a original serve de miniatura.
-      const thumb = await repo.storeImage(user.id, BUCKETS.wardrobeThumbnails, fileName, buffer, contentType)
-      thumbRef = thumb.ref ?? thumb.url
-    }
+    // Miniatura: a versão limpa quando existe, senão o recorte com fundo.
+    const fonteMiniatura = input.image_processed_url?.startsWith('data:')
+      ? input.image_processed_url
+      : input.image_original_url?.startsWith('data:')
+        ? input.image_original_url
+        : null
+    const miniatura = fonteMiniatura
+      ? await guardar(repo, user.id, BUCKETS.wardrobeThumbnails, fonteMiniatura, base)
+      : input.thumbnail_url
 
     const item = await repo.createItem(user.id, {
       ...input,
-      image_original_url: imageRef ?? input.image_original_url,
-      thumbnail_url: thumbRef ?? input.thumbnail_url,
+      image_original_url: original,
+      image_processed_url: processada,
+      thumbnail_url: miniatura,
     })
 
     return ok({ item }, 201)

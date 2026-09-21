@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { getContext } from '@/services/context'
 import { createWardrobeItemSchema } from '@/schemas/wardrobe'
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     // A foto do conjunto é a mesma para todas as peças; a pessoa troca depois.
     const { buffer, contentType } = dataUrlToBuffer(body.image)
     const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
-    const fileName = `look-${Date.now()}.${ext}`
+    const fileName = `look-${randomUUID()}.${ext}`
 
     const original = await repo.storeImage(user.id, BUCKETS.wardrobeOriginal, fileName, buffer, contentType)
     const thumb = await repo.storeImage(user.id, BUCKETS.wardrobeThumbnails, fileName, buffer, contentType)
@@ -36,11 +37,25 @@ export async function POST(request: Request) {
 
     const criadas = []
     for (const item of body.items) {
+      // Cada peça com o SEU recorte do look. Sem recorte, cai na foto inteira —
+      // mas só como último recurso, não como regra.
+      let original_ref = original.ref ?? original.url
+      let thumb_ref = thumb.ref ?? thumb.url
+      if (item.image_original_url?.startsWith('data:')) {
+        const recorte = dataUrlToBuffer(item.image_original_url)
+        const rExt = recorte.contentType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'
+        const nome = `${randomUUID()}.${rExt}`
+        const o = await repo.storeImage(user.id, BUCKETS.wardrobeOriginal, nome, recorte.buffer, recorte.contentType)
+        const t = await repo.storeImage(user.id, BUCKETS.wardrobeThumbnails, nome, recorte.buffer, recorte.contentType)
+        original_ref = o.ref ?? o.url
+        thumb_ref = t.ref ?? t.url
+      }
       criadas.push(
         await repo.createItem(user.id, {
           ...item,
-          image_original_url: original.ref ?? original.url,
-          thumbnail_url: thumb.ref ?? thumb.url,
+          image_original_url: original_ref,
+          thumbnail_url: thumb_ref,
+          metadata: { ...(item.metadata ?? {}), origem: 'look-pronto', foto_origem: original.ref ?? original.url },
         }),
       )
     }

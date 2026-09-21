@@ -106,7 +106,7 @@ export class MemoryRepository implements Repository {
       image_original_url: input.image_original_url ?? null,
       image_processed_url: input.image_processed_url ?? null,
       thumbnail_url: input.thumbnail_url ?? null,
-      metadata: {},
+      metadata: input.metadata ?? {},
       active: true,
       created_at: now,
       updated_at: now,

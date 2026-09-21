@@ -8,13 +8,15 @@ import { Button } from '@/components/ui/button'
 import { ALL_SUBCATEGORIES, CATEGORIES, type DetectedGarment } from '@/schemas/wardrobe'
 import { STYLES } from '@/schemas/outfit'
 import { garmentName, styleLabel, subcategoryLabel } from '@/lib/labels'
-import { downscale } from '@/lib/image-client'
+import { cropPiece, loadPhoto, toDataUrl, type LoadedPhoto } from '@/lib/images/client-pipeline'
 
 type Step = 'capture' | 'classifying' | 'review' | 'saving'
 
 interface Draft extends DetectedGarment {
   name: string
   incluir: boolean
+  /** Recorte da peça dentro da foto do look. */
+  recorte: string
 }
 
 /**
@@ -29,6 +31,7 @@ export function AddLookForm() {
   const router = useRouter()
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
+  const foto = useRef<LoadedPhoto | null>(null)
 
   const [step, setStep] = useState<Step>('capture')
   const [preview, setPreview] = useState<string | null>(null)
@@ -43,13 +46,15 @@ export function AddLookForm() {
     setError(null)
     setStep('classifying')
     try {
-      const dataUrl = await downscale(file, 900)
-      setPreview(dataUrl)
+      const carregada = await loadPhoto(file)
+      foto.current = carregada
+      // Foto do look (o que vira a imagem do look salvo) e versão para a IA.
+      setPreview(toDataUrl(carregada, 900, 0.85))
 
       const res = await fetch('/api/wardrobe/classify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl, hint: 'look completo montado' }),
+        body: JSON.stringify({ image: toDataUrl(carregada, 1600, 0.85), hint: 'look completo montado' }),
       })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error ?? 'Não consegui identificar as peças.')
@@ -60,7 +65,16 @@ export function AddLookForm() {
           ? 'Identifiquei uma peça. Se o look tem mais, vale uma foto com as peças mais visíveis.'
           : `Identifiquei ${detected.length} peças neste look.`,
       )
-      setDrafts(detected.map((c) => ({ ...c, name: garmentName(c.subcategory, c.color), incluir: true })))
+      // Recorte de cada peça sem remoção de fundo: numa foto vestida, o que
+      // envolve a blusa é o corpo da pessoa, não um fundo a apagar.
+      setDrafts(
+        detected.map((c) => ({
+          ...c,
+          name: garmentName(c.subcategory, c.color),
+          incluir: true,
+          recorte: cropPiece(carregada, c.box, { pad: 0.1, maxSide: 700, removerFundo: false }).original,
+        })),
+      )
       setStep('review')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao processar a foto.')
@@ -88,6 +102,8 @@ export function AddLookForm() {
           name: nome.trim() || undefined,
           style: estilo,
           items: selecionadas.map((d) => ({
+            image_original_url: d.recorte,
+            metadata: { caixa_ia: d.box, posicao: d.position },
             name: d.name,
             category: d.category,
             subcategory: d.subcategory,
@@ -227,6 +243,8 @@ export function AddLookForm() {
                       onChange={(e) => patch(index, 'incluir', e.target.checked)}
                       className="size-4 accent-[var(--color-espresso)]"
                     />
+                    {/* eslint-disable-next-line @next/next/no-img-element -- recorte local */}
+                    <img src={draft.recorte} alt={draft.name} className="size-12 shrink-0 rounded-soft object-cover" />
                     <input
                       value={draft.name}
                       onChange={(e) => patch(index, 'name', e.target.value)}

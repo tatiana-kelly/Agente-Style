@@ -82,6 +82,7 @@ export class SupabaseRepository implements Repository {
         image_original_url: input.image_original_url ?? null,
         image_processed_url: input.image_processed_url ?? null,
         thumbnail_url: input.thumbnail_url ?? null,
+        metadata: input.metadata ?? {},
       })
       .select('*')
       .single()

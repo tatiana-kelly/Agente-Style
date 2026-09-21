@@ -66,8 +66,20 @@ export type Classification = z.infer<typeof classificationSchema>
  * Peça detectada dentro de uma foto que pode ter várias.
  * `position` é só para a pessoa distinguir uma da outra na hora de revisar.
  */
+export const boxSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0).max(1),
+  h: z.number().min(0).max(1),
+})
+
 export const detectedGarmentSchema = classificationSchema.extend({
   position: z.string().default(''),
+  /**
+   * Onde a peça está na foto, normalizado 0..1. É o que permite recortar cada
+   * peça — sem isto, todas herdavam a foto inteira. Null = modelo não soube.
+   */
+  box: boxSchema.nullable().default(null),
 })
 export type DetectedGarment = z.infer<typeof detectedGarmentSchema>
 
@@ -91,6 +103,8 @@ export const wardrobeItemSchema = classificationSchema.extend({
 export type WardrobeItem = z.infer<typeof wardrobeItemSchema>
 
 export const createWardrobeItemSchema = classificationSchema.partial().extend({
+  /** Origem do recorte: foto do lote + caixa. Permite recortar de novo depois. */
+  metadata: z.record(z.string(), z.unknown()).optional(),
   name: z.string().min(1, 'Dê um nome para a peça'),
   category: categorySchema,
   subcategory: z.string().min(1),
