@@ -219,6 +219,12 @@ const ACESSORIO_PADRAO: FormulaSlot = {
   archetypes: ['jewelry', 'watch', 'belt', 'sunglasses', 'visor', 'cap'],
 }
 
+/** Mesmo raciocínio para bolsa: quase todo look sai de casa com uma. */
+const BOLSA_PADRAO: FormulaSlot = {
+  role: 'bag',
+  archetypes: ['structured_bag', 'tote', 'backpack', 'tennis_bag'],
+}
+
 function addOptional(
   base: Array<{ item: WardrobeItem; role: OutfitRole; slotAffinity: number }>,
   items: WardrobeItem[],
@@ -233,6 +239,7 @@ function addOptional(
   const slots = [...formula.optional_roles]
   // Sem acessório na fórmula, usa o padrão: a pessoa quer o look terminado.
   if (!slots.some((s) => s.role === 'accessory')) slots.push(ACESSORIO_PADRAO)
+  if (!slots.some((s) => s.role === 'bag')) slots.push(BOLSA_PADRAO)
 
   for (const slot of slots) {
     // Sobreposição não é acabamento: só entra se fizer frio ou a fórmula exigir.

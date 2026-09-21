@@ -154,13 +154,23 @@ export function parseRefinement(instrucao: string, items: WardrobeItem[]): Refin
  */
 export function faltantes(instrucao: string, items: WardrobeItem[]): string[] {
   const faltas: string[] = []
-  for (const trecho of segmentar(instrucao ?? '')) {
-    if (VERBOS_REMOVER.test(trecho)) continue
+
+  // Quebra também em "e" solto, para listar item a item em vez de devolver a
+  // frase inteira: "sapato vermelho; cinto vermelho" é acionável, a frase não.
+  const pedacos = segmentar(instrucao ?? '').flatMap((t) => t.split(/\be\b/i))
+
+  for (const bruto of pedacos) {
+    const trecho = bruto.trim()
+    if (!trecho || VERBOS_REMOVER.test(trecho)) continue
     const termo = TERMOS.find((t) => t.re.test(trecho))
     if (!termo) continue
-    if (casar(trecho, items).length === 0) {
-      faltas.push(trecho.replace(/^\s*(e\s+)?/, '').trim())
-    }
+    if (casar(trecho, items).length > 0) continue
+
+    const limpo = trecho
+      .replace(VERBOS_INCLUIR, '')
+      .replace(/^\s*(um|uma|o|a|os|as)\s+/i, '')
+      .trim()
+    if (limpo) faltas.push(limpo)
   }
-  return faltas
+  return [...new Set(faltas)]
 }
