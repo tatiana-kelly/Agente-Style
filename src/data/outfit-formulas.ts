@@ -46,8 +46,8 @@ const BAG_ELEGANT = ['structured_bag', 'tote']
 const WORK: OutfitFormula[] = [
   f('work-blazer-blouse-trousers', 'Blazer + blusa + alfaiataria', 'work',
     ['trabalho', 'social', 'elegante'], ['trabalho', 'reuniao'], [7, 9],
-    [['top', ['blouse', 'shirt']], ['bottom', ['tailored_trousers', 'wide_leg_trousers']], ['shoes', SHOES_ELEGANT]],
-    [['outerwear', ['blazer']], ['bag', BAG_ELEGANT], ['accessory', ACC_ELEGANT]],
+    [['top', ['blouse', 'shirt']], ['bottom', ['tailored_trousers', 'wide_leg_trousers']], ['shoes', SHOES_ELEGANT], ['outerwear', ['blazer']]],
+    [['bag', BAG_ELEGANT], ['accessory', ACC_ELEGANT]],
     ['NEUTRAL', 'CLASSIC', 'MONOCHROMATIC'], 'structured',
     'O blazer é o que sobe o registro: o mesmo conjunto sem ele vira business casual.',
     'dress-code', 'business formal — blazer como marcador de formalidade', 0.15),
@@ -94,8 +94,8 @@ const WORK: OutfitFormula[] = [
 
   f('work-blazer-tshirt-trousers', 'Blazer + camiseta + alfaiataria', 'work',
     ['trabalho', 'moderno'], ['trabalho', 'almoco'], [5, 7],
-    [['top', ['tshirt', 'tank']], ['bottom', ['tailored_trousers', 'wide_leg_trousers']], ['shoes', ['loafers', 'sneakers', 'flats']]],
-    [['outerwear', ['blazer']], ['accessory', ACC_ELEGANT]],
+    [['top', ['tshirt', 'tank']], ['bottom', ['tailored_trousers', 'wide_leg_trousers']], ['shoes', ['loafers', 'sneakers', 'flats']], ['outerwear', ['blazer']]],
+    [['accessory', ACC_ELEGANT]],
     ['NEUTRAL', 'MONOCHROMATIC'], 'structured',
     'Camiseta sob o blazer é o jeito contemporâneo de baixar a formalidade sem desleixo.',
     'styling-principle', 'blazer sobre peça casual', 0.55),
@@ -330,8 +330,8 @@ const CASUAL: OutfitFormula[] = [
 
   f('casual-jeans-blazer', 'Jeans + blazer', 'casual',
     ['casual', 'moderno', 'trabalho'], ['dia-comum', 'almoco', 'passeio'], [4, 6],
-    [['top', ['tshirt', 'knit', 'shirt']], ['bottom', ['jeans']], ['shoes', ['loafers', 'sneakers', 'flats']]],
-    [['outerwear', ['blazer']], ['accessory', ['watch', 'belt']], ['bag', ['tote', 'structured_bag']]],
+    [['top', ['tshirt', 'knit', 'shirt']], ['bottom', ['jeans']], ['shoes', ['loafers', 'sneakers', 'flats']], ['outerwear', ['blazer']]],
+    [['accessory', ['watch', 'belt']], ['bag', ['tote', 'structured_bag']]],
     ['CLASSIC', 'NEUTRAL'], 'structured',
     'Blazer sobre jeans: o jeito mais rápido de fazer o casual parecer intencional.',
     'styling-principle', 'estrutura sobre casual', 0.3),

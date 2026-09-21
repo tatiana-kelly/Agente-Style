@@ -80,7 +80,12 @@ function explain(candidate: OutfitCandidate, ctx: EngineContext): string {
     partes.push(`Escolhi ${anchor.name.toLowerCase()} como peça única.`)
   }
 
-  partes.push(capitalize(formula.description))
+  // Rede de segurança: se a descrição da fórmula cita uma peça que não entrou
+  // no look, ela é omitida. Explicação que menciona blazer num look sem blazer
+  // não é imprecisão de estilo — é o sistema inventando roupa.
+  if (descricaoConfere(formula.description, candidate)) {
+    partes.push(capitalize(formula.description))
+  }
 
   // Cor: dizer QUAL relação, não só "combina".
   partes.push(`As cores formam ${describeRelation(palette.dominant)}.`)
@@ -104,6 +109,24 @@ function explain(candidate: OutfitCandidate, ctx: EngineContext): string {
   }
 
   return partes.join(' ')
+}
+
+/** Palavras de peça que, se citadas, precisam existir no look. */
+const PECAS_CITAVEIS: Array<[RegExp, (i: { role: OutfitRole; item: WardrobeItem }) => boolean]> = [
+  [/blazer/i, (i) => i.item.subcategory === 'blazer'],
+  [/casaco|sobretudo/i, (i) => i.item.subcategory === 'casaco'],
+  [/corta-vento/i, (i) => i.item.subcategory === 'corta-vento'],
+  [/cardig/i, (i) => i.item.subcategory === 'cardiga'],
+  [/joia|colar|brinco/i, (i) => ['joia', 'bijuteria'].includes(i.item.subcategory)],
+  [/bolsa/i, (i) => i.role === 'bag'],
+  [/salto/i, (i) => i.item.subcategory === 'salto'],
+]
+
+function descricaoConfere(descricao: string, candidate: OutfitCandidate): boolean {
+  for (const [re, presente] of PECAS_CITAVEIS) {
+    if (re.test(descricao) && !candidate.items.some(presente)) return false
+  }
+  return true
 }
 
 function capitalize(s: string): string {
