@@ -203,6 +203,73 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
   }
 }
 
+/**
+ * Gera a imagem de um look JÁ PERSISTIDO.
+ *
+ * Existe para que as 3 opções sejam escolhas de verdade: cada uma pode virar
+ * imagem sob demanda, sem gerar as três de saída — o que custaria US$ 0,57 por
+ * pedido para mostrar duas que a pessoa talvez nem escolha (PRP §59).
+ */
+export async function renderLookImage(args: {
+  repo: Repository
+  userId: string
+  outfitId: string
+}): Promise<{ success: boolean; imageUrl?: string; error?: string; costUsd: number }> {
+  const { repo, userId, outfitId } = args
+  const budget = new CostBudget()
+
+  const existente = await repo.getGeneratedLook(userId, outfitId)
+  if (existente?.image_url) {
+    // Já gerada: reaproveitar em vez de pagar de novo (PRP §35).
+    return { success: true, imageUrl: existente.image_url, costUsd: 0 }
+  }
+
+  const outfit = await repo.getOutfit(userId, outfitId)
+  if (!outfit) return { success: false, error: 'Look não encontrado.', costUsd: 0 }
+
+  const spentToday = await repo.todayCost(userId)
+  if (spentToday >= env.maxDailyCostUsd) {
+    return {
+      success: false,
+      error: `Teto diário de IA atingido (US$ ${env.maxDailyCostUsd}).`,
+      costUsd: 0,
+    }
+  }
+
+  const [items, photo] = await Promise.all([repo.listItems(userId), repo.getPrimaryPhoto(userId)])
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const picks = outfit.items
+    .map((oi) => ({ item: byId.get(oi.wardrobe_item_id), role: oi.role }))
+    .filter((x): x is { item: (typeof items)[number]; role: typeof x.role } => Boolean(x.item))
+
+  if (picks.length === 0) return { success: false, error: 'As peças deste look não existem mais.', costUsd: 0 }
+
+  const intent = resolveStyleIntent({ style: outfit.style, occasion: outfit.occasion ?? undefined })
+
+  const image = await renderWithRetries({
+    request: { userId, style: outfit.style, intent: 'render_only' } as HermesRequest,
+    outfit: { items: picks, scores: {}, explanation: outfit.explanation, name: outfit.name, formulaId: '', formulaName: '', tier: 1, signature: '' },
+    intent,
+    photoUrl: photo?.image_url ?? null,
+    budget,
+    repo,
+  })
+
+  if (!image.url) return { success: false, error: image.warning, costUsd: budget.total }
+
+  await repo.saveGeneratedLook({
+    user_id: userId,
+    outfit_id: outfitId,
+    prompt: image.prompt,
+    image_url: image.ref,
+    model: image.model,
+    generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy },
+    quality_score: image.qualityScore,
+  })
+
+  return { success: true, imageUrl: image.url, costUsd: budget.total }
+}
+
 interface RenderOutcome {
   /** URL assinada, para a resposta HTTP. */
   url: string | null

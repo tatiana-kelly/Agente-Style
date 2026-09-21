@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Camera, Check, Loader2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  ALL_SUBCATEGORIES, CATEGORIES, OCCASIONS, SPORT_TYPES, type Classification,
+  ALL_SUBCATEGORIES, CATEGORIES, OCCASIONS, SPORT_TYPES,
+  type DetectedGarment,
 } from '@/schemas/wardrobe'
 import { titleCase } from '@/lib/utils'
 import { occasionLabel, subcategoryLabel } from '@/lib/labels'
@@ -13,6 +14,20 @@ import { downscale } from '@/lib/image-client'
 
 type Step = 'capture' | 'classifying' | 'review' | 'saving'
 
+interface Draft extends DetectedGarment {
+  name: string
+  brand: string
+  incluir: boolean
+}
+
+/**
+ * Cadastro de peça.
+ *
+ * Uma foto pode conter mais de uma peça — é assim que a pessoa fotografa de
+ * verdade, o conjunto estendido na cama. Antes o sistema catalogava "blusa e
+ * calça" como uma peça só, e o erro contaminava todo look montado depois.
+ * Agora cada peça detectada vira uma linha revisável.
+ */
 export function AddItemForm() {
   const router = useRouter()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -20,9 +35,10 @@ export function AddItemForm() {
 
   const [step, setStep] = useState<Step>('capture')
   const [preview, setPreview] = useState<string | null>(null)
-  const [draft, setDraft] = useState<(Classification & { name: string; brand: string }) | null>(null)
+  const [drafts, setDrafts] = useState<Draft[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [progresso, setProgresso] = useState<string | null>(null)
 
   async function handleFile(file: File) {
     setError(null)
@@ -39,9 +55,9 @@ export function AddItemForm() {
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error ?? 'Não consegui classificar a peça.')
 
-      const c = payload.classification as Classification
+      const detected = payload.items as DetectedGarment[]
       setNotice(payload.warning ?? null)
-      setDraft({ ...c, name: suggestName(c), brand: '' })
+      setDrafts(detected.map((c) => ({ ...c, name: suggestName(c), brand: '', incluir: true })))
       setStep('review')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao processar a imagem.')
@@ -49,29 +65,42 @@ export function AddItemForm() {
     }
   }
 
+  function patch<K extends keyof Draft>(index: number, key: K, value: Draft[K]) {
+    setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, [key]: value } : d)))
+  }
+
   async function save() {
-    if (!draft) return
+    const selecionadas = drafts.filter((d) => d.incluir)
+    if (selecionadas.length === 0) return
+
     setStep('saving')
     setError(null)
     try {
-      const res = await fetch('/api/wardrobe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...draft, image_original_url: preview ?? undefined, thumbnail_url: preview ?? undefined }),
-      })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error ?? 'Não consegui salvar a peça.')
+      for (const [i, draft] of selecionadas.entries()) {
+        setProgresso(`Salvando ${i + 1} de ${selecionadas.length}…`)
+        const res = await fetch('/api/wardrobe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...draft,
+            brand: draft.brand.trim() || undefined,
+            // Todas compartilham a foto original; a pessoa troca depois se quiser.
+            image_original_url: preview ?? undefined,
+          }),
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error ?? `Falha ao salvar "${draft.name}".`)
+      }
       router.push('/wardrobe')
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao salvar.')
       setStep('review')
+      setProgresso(null)
     }
   }
 
-  function patch<K extends keyof NonNullable<typeof draft>>(key: K, value: NonNullable<typeof draft>[K]) {
-    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev))
-  }
+  const selecionadas = drafts.filter((d) => d.incluir).length
 
   return (
     <div className="rise pb-8">
@@ -79,9 +108,7 @@ export function AddItemForm() {
       <h1 className="display mt-2 text-3xl md:text-4xl">Cadastrar no guarda-roupa</h1>
 
       {error && (
-        <p role="alert" className="mt-5 rounded-soft bg-rose/10 px-4 py-3 text-sm text-rose">
-          {error}
-        </p>
+        <p role="alert" className="mt-5 rounded-soft bg-rose/10 px-4 py-3 text-sm text-rose">{error}</p>
       )}
 
       <div className="mt-6 grid gap-6 md:grid-cols-[320px_1fr]">
@@ -121,102 +148,131 @@ export function AddItemForm() {
           {step === 'classifying' && (
             <div className="flex items-center gap-3 rounded-card bg-ivory px-5 py-6 text-sm text-cocoa">
               <Loader2 className="size-4 animate-spin" />
-              Identificando a peça…
+              Identificando as peças…
             </div>
           )}
 
           {step === 'capture' && (
             <div className="rounded-card border border-dashed border-sand px-5 py-8 text-sm leading-relaxed text-cocoa">
-              Tire a foto da peça sobre um fundo liso, esticada ou pendurada. A IA preenche
-              categoria, cor, tecido e formalidade — você revisa antes de salvar.
+              Tire a foto sobre um fundo liso. Pode fotografar <strong>mais de uma peça</strong> na
+              mesma imagem — a IA separa cada uma, e você revisa antes de salvar.
             </div>
           )}
 
-          {draft && (step === 'review' || step === 'saving') && (
+          {drafts.length > 0 && (step === 'review' || step === 'saving') && (
             <div className="space-y-4">
               {notice && (
                 <p className="rounded-soft bg-ivory px-4 py-2.5 text-xs leading-relaxed text-cocoa">{notice}</p>
               )}
 
-              <Field label="Nome">
-                <input
-                  value={draft.name}
-                  onChange={(e) => patch('name', e.target.value)}
-                  className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
-                />
-              </Field>
+              {drafts.map((draft, index) => (
+                <div
+                  key={index}
+                  className={`rounded-card border p-4 transition-colors ${
+                    draft.incluir ? 'border-sand bg-ivory/40' : 'border-sand/50 bg-transparent opacity-55'
+                  }`}
+                >
+                  <label className="flex cursor-pointer items-center gap-2.5 pb-3">
+                    <input
+                      type="checkbox"
+                      checked={draft.incluir}
+                      onChange={(e) => patch(index, 'incluir', e.target.checked)}
+                      className="size-4 accent-[var(--color-espresso)]"
+                    />
+                    <span className="text-sm font-medium">
+                      Peça {index + 1}
+                      {draft.position ? <span className="font-normal text-mist"> · {draft.position}</span> : null}
+                    </span>
+                  </label>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Categoria">
-                  <Select
-                    value={draft.category}
-                    options={[...CATEGORIES]}
-                    onChange={(v) => patch('category', v as Classification['category'])}
-                  />
-                </Field>
-                <Field label="Subcategoria">
-                  <Select
-                    value={draft.subcategory}
-                    options={[...ALL_SUBCATEGORIES]}
-                    onChange={(v) => patch('subcategory', v)}
-                  />
-                </Field>
-                <Field label="Cor">
-                  <input
-                    value={draft.color}
-                    onChange={(e) => patch('color', e.target.value)}
-                    className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
-                  />
-                </Field>
-                <Field label="Marca (opcional)">
-                  <input
-                    value={draft.brand}
-                    onChange={(e) => patch('brand', e.target.value)}
-                    className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
-                  />
-                </Field>
-                <Field label="Esporte">
-                  <Select
-                    value={draft.sport_type}
-                    options={[...SPORT_TYPES]}
-                    onChange={(v) => patch('sport_type', v as Classification['sport_type'])}
-                  />
-                </Field>
-                <Field label={`Formalidade: ${draft.formality}`}>
-                  <input
-                    type="range" min={0} max={10} value={draft.formality}
-                    onChange={(e) => patch('formality', Number(e.target.value))}
-                    className="w-full accent-[var(--color-espresso)]"
-                  />
-                </Field>
-              </div>
+                  <div className="space-y-3">
+                    <Field label="Nome">
+                      <input
+                        value={draft.name}
+                        onChange={(e) => patch(index, 'name', e.target.value)}
+                        className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
+                      />
+                    </Field>
 
-              <Field label="Ocasiões">
-                <div className="flex flex-wrap gap-2">
-                  {OCCASIONS.map((o) => {
-                    const active = draft.occasion.includes(o)
-                    return (
-                      <button
-                        key={o}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() =>
-                          patch('occasion', active ? draft.occasion.filter((x) => x !== o) : [...draft.occasion, o])
-                        }
-                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                          active ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
-                        }`}
-                      >
-                        {occasionLabel(o)}
-                      </button>
-                    )
-                  })}
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Categoria">
+                        <Select
+                          value={draft.category}
+                          options={[...CATEGORIES]}
+                          onChange={(v) => patch(index, 'category', v as Draft['category'])}
+                        />
+                      </Field>
+                      <Field label="Subcategoria">
+                        <Select
+                          value={draft.subcategory}
+                          options={[...ALL_SUBCATEGORIES]}
+                          label={subcategoryLabel}
+                          onChange={(v) => patch(index, 'subcategory', v)}
+                        />
+                      </Field>
+                      <Field label="Cor">
+                        <input
+                          value={draft.color}
+                          onChange={(e) => patch(index, 'color', e.target.value)}
+                          className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
+                        />
+                      </Field>
+                      <Field label="Marca (opcional)">
+                        <input
+                          value={draft.brand}
+                          onChange={(e) => patch(index, 'brand', e.target.value)}
+                          className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
+                        />
+                      </Field>
+                      <Field label="Esporte">
+                        <Select
+                          value={draft.sport_type}
+                          options={[...SPORT_TYPES]}
+                          onChange={(v) => patch(index, 'sport_type', v as Draft['sport_type'])}
+                        />
+                      </Field>
+                      <Field label={`Formalidade: ${draft.formality}`}>
+                        <input
+                          type="range" min={0} max={10} value={draft.formality}
+                          onChange={(e) => patch(index, 'formality', Number(e.target.value))}
+                          className="w-full accent-[var(--color-espresso)]"
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label="Ocasiões">
+                      <div className="flex flex-wrap gap-2">
+                        {OCCASIONS.map((o) => {
+                          const active = draft.occasion.includes(o)
+                          return (
+                            <button
+                              key={o}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() =>
+                                patch(
+                                  index,
+                                  'occasion',
+                                  active ? draft.occasion.filter((x) => x !== o) : [...draft.occasion, o],
+                                )
+                              }
+                              className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                                active ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
+                              }`}
+                            >
+                              {occasionLabel(o)}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </Field>
+                  </div>
                 </div>
-              </Field>
+              ))}
 
-              <Button onClick={save} disabled={step === 'saving' || !draft.name.trim()} className="w-full md:w-auto">
+              <Button onClick={save} disabled={step === 'saving' || selecionadas === 0} className="w-full md:w-auto">
                 {step === 'saving' ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                Salvar peça
+                {progresso ?? (selecionadas === 1 ? 'Salvar peça' : `Salvar ${selecionadas} peças`)}
               </Button>
             </div>
           )}
@@ -236,11 +292,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Select({
-  value, options, onChange,
+  value, options, onChange, label = titleCase,
 }: {
   value: string
   options: string[]
   onChange: (v: string) => void
+  label?: (v: string) => string
 }) {
   return (
     <select
@@ -249,15 +306,12 @@ function Select({
       className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
     >
       {options.map((o) => (
-        <option key={o} value={o}>
-          {titleCase(o)}
-        </option>
+        <option key={o} value={o}>{label(o)}</option>
       ))}
     </select>
   )
 }
 
-function suggestName(c: Classification): string {
+function suggestName(c: DetectedGarment): string {
   return `${subcategoryLabel(c.subcategory)} ${c.color}`.trim()
 }
-

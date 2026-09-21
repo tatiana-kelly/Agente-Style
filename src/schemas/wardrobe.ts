@@ -57,6 +57,19 @@ export const classificationSchema = z.object({
 })
 export type Classification = z.infer<typeof classificationSchema>
 
+/**
+ * Peça detectada dentro de uma foto que pode ter várias.
+ * `position` é só para a pessoa distinguir uma da outra na hora de revisar.
+ */
+export const detectedGarmentSchema = classificationSchema.extend({
+  position: z.string().default(''),
+})
+export type DetectedGarment = z.infer<typeof detectedGarmentSchema>
+
+export const detectionSchema = z.object({
+  items: z.array(detectedGarmentSchema).min(1),
+})
+
 export const wardrobeItemSchema = classificationSchema.extend({
   id: z.string(),
   user_id: z.string(),

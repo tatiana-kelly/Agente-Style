@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Heart, Loader2, RefreshCw, Replace, Save, Sparkles } from 'lucide-react'
+import { Eye, Heart, Loader2, RefreshCw, Replace, Save, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { ItemThumb } from '@/components/ui/item-thumb'
@@ -48,7 +48,8 @@ export function LookStudio() {
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<LookResponse | null>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [imagens, setImagens] = useState<Record<string, string>>({})
+  const [gerando, setGerando] = useState<string | null>(null)
   const [swapRole, setSwapRole] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -60,8 +61,6 @@ export function LookStudio() {
     const id = setInterval(() => setProgress((p) => Math.min(p + 1, PROGRESS.length - 1)), 2600)
     return () => clearInterval(id)
   }, [loading])
-
-  const active = result?.proposals?.[activeIndex] ?? null
 
   async function generate(options: { excludeIds?: string[]; lockedIds?: string[] } = {}) {
     if (!style) return
@@ -79,7 +78,7 @@ export function LookStudio() {
           style,
           occasion: occasion ?? undefined,
           context: context.trim() || undefined,
-          render_image: true,
+          render_image: false,
           novelty,
           exclude_item_ids: options.excludeIds ?? [],
           locked_item_ids: options.lockedIds ?? [],
@@ -89,7 +88,7 @@ export function LookStudio() {
       if (!payload.success) throw new Error(payload.error ?? 'Não consegui montar o look.')
 
       setResult(payload)
-      setActiveIndex(0)
+      setImagens({})
       requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao montar o look.')
@@ -99,24 +98,39 @@ export function LookStudio() {
   }
 
   /** Trocar peça: trava o resto do look e exclui só a peça recusada. */
-  async function swapPiece(role: string) {
-    if (!active) return
-    const target = active.items.find((i) => i.role === role)
+  async function swapPiece(p: Proposal, role: string) {
+    const target = p.items.find((i) => i.role === role)
     if (!target) return
     await generate({
       excludeIds: [target.item.id],
-      lockedIds: active.items.filter((i) => i.role !== role).map((i) => i.item.id),
+      lockedIds: p.items.filter((i) => i.role !== role).map((i) => i.item.id),
     })
   }
 
-  async function sendFeedback(action: 'liked' | 'saved' | 'rejected') {
-    if (!active) return
+  async function sendFeedback(p: Proposal, action: 'liked' | 'saved' | 'rejected') {
     await fetch('/api/preferences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ outfit_id: active.outfitId, action }),
+      body: JSON.stringify({ outfit_id: p.outfitId, action }),
     })
     setFeedback(action === 'saved' ? 'Look salvo em Meus looks.' : 'Anotado — vou usar isso nas próximas sugestões.')
+  }
+
+  /** A imagem custa; só gera a do look que a pessoa escolheu ver. */
+  async function verEmMim(p: Proposal) {
+    if (imagens[p.outfitId] || gerando) return
+    setGerando(p.outfitId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/outfits/${p.outfitId}/image`, { method: 'POST' })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error ?? 'Não consegui gerar a imagem.')
+      setImagens((prev) => ({ ...prev, [p.outfitId]: payload.imageUrl }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao gerar a imagem.')
+    } finally {
+      setGerando(null)
+    }
   }
 
   return (
@@ -218,86 +232,105 @@ export function LookStudio() {
         </div>
       )}
 
-      {result && active && !loading && (
+      {result?.proposals && result.proposals.length > 0 && !loading && (
         <div ref={resultRef} className="rise mt-10 scroll-mt-24">
-          <h2 className="display text-2xl">Seu look</h2>
-
-          {result.proposals && result.proposals.length > 1 && (
-            <div className="mt-3 flex gap-2">
-              {result.proposals.map((p, i) => (
-                <Chip key={p.outfitId} active={i === activeIndex} onClick={() => setActiveIndex(i)}>
-                  {i === 0 ? 'Principal' : `Alternativa ${i}`}
-                </Chip>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-5 grid gap-5 md:grid-cols-[1fr_300px]">
-            <figure className="overflow-hidden rounded-card bg-ivory">
-              {result.generatedImageUrl && activeIndex === 0 ? (
-                // eslint-disable-next-line @next/next/no-img-element -- URL assinada / data URL
-                <img src={result.generatedImageUrl} alt="Visualização do look" className="w-full object-cover" />
-              ) : (
-                <div className="flex aspect-[2/3] flex-col items-center justify-center gap-3 px-8 text-center">
-                  <p className="display text-xl">Look montado</p>
-                  <p className="text-sm leading-relaxed text-cocoa">
-                    {result.imageWarning ??
-                      (activeIndex > 0
-                        ? 'Visualização disponível apenas para o look principal.'
-                        : 'Não conseguimos gerar a visualização agora — as peças abaixo são a sua combinação.')}
-                  </p>
-                </div>
-              )}
-            </figure>
-
-            <div>
-              <p className="text-sm leading-relaxed text-cocoa">{active.explanation}</p>
-
-              <ul className="mt-5 space-y-2">
-                {active.items.map(({ role, item }) => (
-                  <li key={item.id} className="flex items-center gap-3 rounded-soft bg-ivory/70 p-2">
-                    <div className="size-14 shrink-0 overflow-hidden rounded-soft">
-                      <ItemThumb item={item} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-mist">{roleLabel(role)}</p>
-                    </div>
-                    {swapRole === 'open' && (
-                      <button
-                        type="button"
-                        onClick={() => swapPiece(role)}
-                        className="shrink-0 rounded-full border border-sand px-3 py-1.5 text-xs text-cocoa hover:border-clay"
-                      >
-                        Trocar
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-5 grid grid-cols-2 gap-2">
-                <Button variant="secondary" size="sm" onClick={() => sendFeedback('liked')}>
-                  <Heart className="size-4" /> Gostei
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => generate({ excludeIds: active.items.map((i) => i.item.id) })}>
-                  <RefreshCw className="size-4" /> Outra opção
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSwapRole(swapRole === 'open' ? null : 'open')}
-                >
-                  <Replace className="size-4" /> Trocar peça
-                </Button>
-                <Button variant="primary" size="sm" onClick={() => sendFeedback('saved')}>
-                  <Save className="size-4" /> Salvar
-                </Button>
-              </div>
-
-              {feedback && <p className="mt-3 text-xs text-cocoa">{feedback}</p>}
-            </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="display text-2xl">
+              {result.proposals.length === 1 ? 'Seu look' : `${result.proposals.length} opções para você`}
+            </h2>
+            {result.degraded && <span className="text-xs text-mist">{result.imageWarning}</span>}
           </div>
+
+          {feedback && <p className="mt-2 text-xs text-cocoa">{feedback}</p>}
+
+          <ul className="mt-5 grid gap-4 md:grid-cols-3">
+            {result.proposals.map((p, i) => {
+              const imagem = imagens[p.outfitId]
+              return (
+                <li key={p.outfitId} className="flex flex-col overflow-hidden rounded-card border border-sand/70 bg-ivory/40">
+                  <figure className="relative aspect-[2/3] overflow-hidden bg-ivory">
+                    {imagem ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL assinada
+                      <img src={imagem} alt={`Opção ${i + 1}`} className="size-full object-cover" />
+                    ) : (
+                      <div className="flex size-full flex-col items-center justify-center gap-3 px-5 text-center">
+                        <div className="flex flex-wrap justify-center gap-1.5">
+                          {p.items.map(({ item }) => (
+                            <span key={item.id} className="size-11 overflow-hidden rounded-soft" title={item.name}>
+                              <ItemThumb item={item} />
+                            </span>
+                          ))}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => verEmMim(p)}
+                          disabled={gerando !== null}
+                        >
+                          {gerando === p.outfitId ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Eye className="size-4" />
+                          )}
+                          {gerando === p.outfitId ? 'Criando…' : 'Ver em mim'}
+                        </Button>
+                      </div>
+                    )}
+                    <span className="absolute left-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 text-[0.625rem] font-medium">
+                      {i === 0 ? 'Principal' : `Opção ${i + 1}`}
+                    </span>
+                  </figure>
+
+                  <div className="flex flex-1 flex-col p-4">
+                    <ul className="space-y-1.5">
+                      {p.items.map(({ role, item }) => (
+                        <li key={item.id} className="flex items-baseline gap-2 text-xs">
+                          <span className="w-20 shrink-0 text-mist">{roleLabel(role)}</span>
+                          <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <p className="mt-3 flex-1 text-xs leading-relaxed text-cocoa">{p.explanation}</p>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => sendFeedback(p, 'liked')}>
+                        <Heart className="size-3.5" /> Gostei
+                      </Button>
+                      <Button variant="primary" size="sm" onClick={() => sendFeedback(p, 'saved')}>
+                        <Save className="size-3.5" /> Salvar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSwapRole(swapRole === p.outfitId ? null : p.outfitId)}
+                      >
+                        <Replace className="size-3.5" /> Trocar
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => generate({ excludeIds: p.items.map((x) => x.item.id) })}>
+                        <RefreshCw className="size-3.5" /> Outra
+                      </Button>
+                    </div>
+
+                    {swapRole === p.outfitId && (
+                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-sand/60 pt-3">
+                        {p.items.map(({ role }) => (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => swapPiece(p, role)}
+                            className="rounded-full border border-sand px-2.5 py-1 text-[0.6875rem] text-cocoa hover:border-clay"
+                          >
+                            Trocar {roleLabel(role).toLowerCase()}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
     </div>

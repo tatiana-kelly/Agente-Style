@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     })
 
     return ok({
-      classification: result.classification,
+      items: result.items,
       source: result.source,
       warning: result.warning,
     })

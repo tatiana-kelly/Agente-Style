@@ -1,7 +1,9 @@
 import OpenAI from 'openai'
 import {
   classificationSchema,
+  detectionSchema,
   type Classification,
+  type DetectedGarment,
   ALL_SUBCATEGORIES,
   CATEGORIES,
   SEASONS,
@@ -13,7 +15,8 @@ import { env, hasOpenAI } from '@/lib/env'
 import { approxTokens, estimateTextCost } from './cost'
 
 export interface ClassificationResult {
-  classification: Classification
+  /** Todas as peças encontradas na foto. Nunca vazio. */
+  items: DetectedGarment[]
   source: 'openai' | 'heuristic'
   estimated_cost: number
   latency_ms: number
@@ -22,7 +25,16 @@ export interface ClassificationResult {
 
 const SYSTEM = `Você cataloga peças de roupa para um guarda-roupa digital.
 Responda SOMENTE com JSON válido, sem markdown.
-Campos e valores permitidos:
+
+A foto pode conter MAIS DE UMA peça (por exemplo blusa e calça lado a lado).
+Devolva {"items":[...]} com UMA entrada por peça de vestuário distinta.
+Uma peça só na foto = array com um item.
+NÃO conte como peça: cabides, cama, móveis, partes do corpo, sombra, fundo.
+NÃO separe partes da mesma peça (gola, manga, botão são a mesma peça).
+Acrescente "position": onde a peça está na foto, em 2 ou 3 palavras
+(ex: "à esquerda", "em cima", "peça de baixo").
+
+Campos de cada item:
 - category: ${CATEGORIES.join(' | ')}
 - subcategory: ${ALL_SUBCATEGORIES.join(' | ')}
 - color: cor dominante em português, uma palavra (ex: preto, branco, marinho, oliva)
@@ -49,7 +61,7 @@ export async function classifyGarment(
 
   if (!hasOpenAI) {
     return {
-      classification: heuristicClassify(hint ?? ''),
+      items: [single(heuristicClassify(hint ?? ''))],
       source: 'heuristic',
       estimated_cost: 0,
       latency_ms: Date.now() - started,
@@ -60,8 +72,8 @@ export async function classifyGarment(
   try {
     const client = new OpenAI({ apiKey: env.openaiKey })
     const userText = hint
-      ? `Contexto do usuário: "${hint}". Classifique a peça da imagem.`
-      : 'Classifique a peça da imagem.'
+      ? `Contexto do usuário: "${hint}". Catalogue as peças da imagem.`
+      : 'Catalogue as peças da imagem.'
 
     const completion = await client.chat.completions.create({
       model: env.textModel,
@@ -79,7 +91,12 @@ export async function classifyGarment(
     })
 
     const content = completion.choices[0]?.message?.content ?? '{}'
-    const parsed = classificationSchema.safeParse(JSON.parse(content))
+    const raw = JSON.parse(content)
+    // Aceita tanto {"items":[...]} quanto o objeto solto de uma peça só,
+    // para o schema antigo não quebrar se o modelo responder do jeito velho.
+    const parsed = detectionSchema.safeParse(
+      Array.isArray(raw?.items) ? raw : { items: [raw] },
+    )
     const usage = completion.usage
     const cost = estimateTextCost(
       usage?.prompt_tokens ?? approxTokens(SYSTEM + userText),
@@ -88,7 +105,7 @@ export async function classifyGarment(
 
     if (!parsed.success) {
       return {
-        classification: heuristicClassify(hint ?? ''),
+        items: [single(heuristicClassify(hint ?? ''))],
         source: 'heuristic',
         estimated_cost: cost,
         latency_ms: Date.now() - started,
@@ -96,15 +113,18 @@ export async function classifyGarment(
       }
     }
 
+    const items = dedupeGarments(parsed.data.items.map((i) => ({ ...normalize(i), position: i.position })))
+
     return {
-      classification: normalize(parsed.data),
+      items,
       source: 'openai',
       estimated_cost: cost,
       latency_ms: Date.now() - started,
+      warning: items.length > 1 ? `Encontrei ${items.length} peças nesta foto.` : undefined,
     }
   } catch (error) {
     return {
-      classification: heuristicClassify(hint ?? ''),
+      items: [single(heuristicClassify(hint ?? ''))],
       source: 'heuristic',
       estimated_cost: 0,
       latency_ms: Date.now() - started,
@@ -114,6 +134,26 @@ export async function classifyGarment(
           : 'Falha na IA.',
     }
   }
+}
+
+function single(c: Classification): DetectedGarment {
+  return { ...c, position: '' }
+}
+
+/**
+ * Duas entradas com a mesma categoria E subcategoria E cor quase certamente são
+ * a mesma peça vista duas vezes — o modelo às vezes separa gola e corpo.
+ */
+function dedupeGarments(items: DetectedGarment[]): DetectedGarment[] {
+  const seen = new Set<string>()
+  const out: DetectedGarment[] = []
+  for (const item of items) {
+    const key = `${item.category}|${item.subcategory}|${item.color.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
 }
 
 /** Garante que a subcategoria pertence à categoria, mesmo se o modelo escorregar. */
