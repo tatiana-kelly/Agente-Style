@@ -164,6 +164,47 @@ A imagem **não** é gerada para as três: sairiam US$ 0,57 por pedido para most
 duas que a pessoa talvez nem escolha. Cada cartão tem "Ver em mim", e
 `POST /api/outfits/[id]/image` reaproveita imagem já gerada em vez de pagar de novo.
 
+## Acessórios
+
+Um look termina com acessório. A fórmula descreve a base, não o acabamento —
+então fórmula sem slot de acessório ou de bolsa recebe um slot padrão.
+
+Até 3 acessórios por look, **uma peça por família**:
+
+| Família | Peças |
+|---|---|
+| pescoço | colar, joia, bijuteria, lenço |
+| orelha | brinco |
+| mãos | anel, pulseira, relógio |
+| cabeça | boné, viseira, chapéu |
+
+Sem isso, o motor empilhava três colares. Sobreposição não conta como acabamento:
+casaco e blazer só entram com frio ou quando a fórmula exige.
+
+## Ajuste escrito à mão
+
+Campo em cada cartão: *"inclua cinto vermelho"*, *"troca o scarpin pela
+sapatilha"*, *"tira a bolsa"*.
+
+A interpretação é determinística contra o próprio guarda-roupa — o vocabulário é
+o das peças cadastradas, e comparar palavra com peça é busca, não raciocínio.
+
+O resto do look fica travado, então o ajuste muda **uma coisa só** em vez de
+sortear tudo de novo. Peça travada vence a fórmula: `garantirTravadas` força a
+entrada mesmo quando a fórmula não previa aquele papel.
+
+Quando a peça pedida não existe, a resposta nomeia o que falta
+(*"sapato vermelho; cinto vermelho; casaco"*) em vez de ignorar o pedido.
+
+## Look pronto por foto
+
+`/outfits/add` recebe a foto de um look já montado. A visão separa as peças,
+cada uma entra no guarda-roupa e o conjunto vira um look salvo.
+
+É a melhor fonte de dado que o produto tem: a foto de um look que a pessoa já usa
+mostra peças que combinam de verdade, escolhidas por ela — e as peças voltam em
+combinações futuras em vez de virar uma foto solta numa galeria.
+
 ## Fidelidade da explicação
 
 A explicação cita as peças reais e o princípio de styling, nunca o nome da

@@ -31,7 +31,7 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | Quality Control | ✅ **real (visão)** | Auditou a imagem gerada: score 0,950, 1 tentativa, 0 ressalvas |
 | Saved Looks | ✅ **real** | 4 looks salvos e listados em produção |
 | Preferences | ✅ **real** | 7 preferências em 4 tipos |
-| Tests | ✅ | 119 testes, todos offline |
+| Tests | ✅ | 136 testes, todos offline |
 | Security | ✅ **auditada** | 0 alertas no Supabase, 0 segredos no bundle do cliente, 0 no histórico git |
 | Build | ✅ | Produção compila com env real, 18 rotas + proxy |
 | Deployment | ✅ **em produção** | Vercel `gru1`, alias ativo, git conectado (push = deploy) |
@@ -42,7 +42,7 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | Passo | Real? | Como foi verificado |
 |---|---|---|
 | LOGIN | ✅ real | Conta no Supabase Auth, senha, sessão em cookie |
-| FOTO DO USUÁRIO | ⚠️ sintética | Upload real ao Storage, mas a imagem é um desenho em canvas — **não é foto da Tatiana**, então a preservação de identidade continua sem teste |
+| FOTO DO USUÁRIO | ✅ real | Foto real enviada; a geração preservou a identidade |
 | CADASTRO DE ROUPAS | ✅ real | 20 linhas em `wardrobe_items` |
 | IA IDENTIFICA ROUPAS | ✅ real | Visão OpenAI classificou corretamente em produção |
 | GUARDA-ROUPA REAL | ✅ real | 19 peças após o teste de exclusão |
