@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Search } from 'lucide-react'
 import type { WardrobeItem } from '@/schemas/wardrobe'
 import { Chip } from '@/components/ui/chip'
 import { ItemThumb } from '@/components/ui/item-thumb'
@@ -21,10 +21,9 @@ const FILTERS = [
 ] as const
 
 export function WardrobeBrowser({ initialItems }: { initialItems: WardrobeItem[] }) {
-  const [items, setItems] = useState(initialItems)
+  const [items] = useState(initialItems)
   const [filter, setFilter] = useState<string>('todos')
   const [query, setQuery] = useState('')
-  const [removing, setRemoving] = useState<string | null>(null)
 
   const visible = useMemo(() => {
     const active = FILTERS.find((f) => f.id === filter) ?? FILTERS[0]
@@ -40,16 +39,6 @@ export function WardrobeBrowser({ initialItems }: { initialItems: WardrobeItem[]
       return q.split(/\s+/).every((token) => haystack.includes(token))
     })
   }, [items, filter, query])
-
-  async function remove(id: string) {
-    setRemoving(id)
-    try {
-      const res = await fetch(`/api/wardrobe/${id}`, { method: 'DELETE' })
-      if (res.ok) setItems((prev) => prev.filter((i) => i.id !== id))
-    } finally {
-      setRemoving(null)
-    }
-  }
 
   return (
     <div className="rise">
@@ -102,24 +91,29 @@ export function WardrobeBrowser({ initialItems }: { initialItems: WardrobeItem[]
         <ul className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {visible.map((item) => (
             <li key={item.id} className="group relative overflow-hidden rounded-card bg-ivory">
-              <div className="aspect-[3/4] overflow-hidden">
-                <ItemThumb item={item} />
-              </div>
-              <div className="px-3 py-3">
-                <p className="truncate text-sm font-medium">{item.name}</p>
-                <p className="mt-0.5 truncate text-xs text-mist">
-                  {titleCase(item.subcategory)} · {titleCase(item.color)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => remove(item.id)}
-                disabled={removing === item.id}
-                aria-label={`Remover ${item.name}`}
-                className="absolute right-2 top-2 rounded-full bg-bone/90 p-2 text-cocoa opacity-0 transition-opacity hover:text-rose focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
+              <Link href={`/wardrobe/${item.id}/edit`} className="block">
+                <div className="aspect-[3/4] overflow-hidden">
+                  <ItemThumb item={item} />
+                </div>
+                <div className="flex items-center gap-2 px-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{item.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-mist">
+                      {titleCase(item.subcategory)} · {titleCase(item.color)}
+                    </p>
+                  </div>
+                  {/*
+                    Sempre visível, nunca só no hover: o produto é usado no
+                    celular fotografando roupa, e lá não existe hover.
+                  */}
+                  <span
+                    aria-hidden
+                    className="shrink-0 rounded-full border border-sand p-2 text-cocoa transition-colors group-hover:border-clay group-hover:text-espresso"
+                  >
+                    <Pencil className="size-3.5" />
+                  </span>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>
