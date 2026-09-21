@@ -9,7 +9,7 @@ import {
   type DetectedGarment,
 } from '@/schemas/wardrobe'
 import { titleCase } from '@/lib/utils'
-import { occasionLabel, subcategoryLabel } from '@/lib/labels'
+import { garmentName, occasionLabel, subcategoryLabel } from '@/lib/labels'
 import { downscale } from '@/lib/image-client'
 
 type Step = 'capture' | 'classifying' | 'review' | 'saving'
@@ -313,5 +313,5 @@ function Select({
 }
 
 function suggestName(c: DetectedGarment): string {
-  return `${subcategoryLabel(c.subcategory)} ${c.color}`.trim()
+  return garmentName(c.subcategory, c.color)
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Eye, Heart, Loader2, RefreshCw, Replace, Save, Sparkles } from 'lucide-react'
+import { Eye, Heart, Loader2, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { ItemThumb } from '@/components/ui/item-thumb'
@@ -19,6 +19,7 @@ interface Proposal {
 }
 
 interface LookResponse {
+  refinementNotes?: string[]
   success: boolean
   outfitId?: string
   generatedImageUrl?: string
@@ -50,6 +51,8 @@ export function LookStudio() {
   const [result, setResult] = useState<LookResponse | null>(null)
   const [imagens, setImagens] = useState<Record<string, string>>({})
   const [gerando, setGerando] = useState<string | null>(null)
+  const [ajuste, setAjuste] = useState<Record<string, string>>({})
+  const [ajustando, setAjustando] = useState<string | null>(null)
   const [swapRole, setSwapRole] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,7 +65,9 @@ export function LookStudio() {
     return () => clearInterval(id)
   }, [loading])
 
-  async function generate(options: { excludeIds?: string[]; lockedIds?: string[] } = {}) {
+  async function generate(
+    options: { excludeIds?: string[]; lockedIds?: string[]; instruction?: string; baseOutfitId?: string } = {},
+  ) {
     if (!style) return
     setProgress(0)
     setLoading(true)
@@ -82,6 +87,8 @@ export function LookStudio() {
           novelty,
           exclude_item_ids: options.excludeIds ?? [],
           locked_item_ids: options.lockedIds ?? [],
+          instruction: options.instruction,
+          base_outfit_id: options.baseOutfitId,
         }),
       })
       const payload: LookResponse = await res.json()
@@ -114,6 +121,19 @@ export function LookStudio() {
       body: JSON.stringify({ outfit_id: p.outfitId, action }),
     })
     setFeedback(action === 'saved' ? 'Look salvo em Meus looks.' : 'Anotado — vou usar isso nas próximas sugestões.')
+  }
+
+  /** Ajuste escrito sobre um look existente. */
+  async function aplicarAjuste(p: Proposal) {
+    const texto = (ajuste[p.outfitId] ?? '').trim()
+    if (!texto) return
+    setAjustando(p.outfitId)
+    try {
+      await generate({ instruction: texto, baseOutfitId: p.outfitId })
+      setAjuste((prev) => ({ ...prev, [p.outfitId]: '' }))
+    } finally {
+      setAjustando(null)
+    }
   }
 
   /** A imagem custa; só gera a do look que a pessoa escolheu ver. */
@@ -242,6 +262,11 @@ export function LookStudio() {
           </div>
 
           {feedback && <p className="mt-2 text-xs text-cocoa">{feedback}</p>}
+          {result.refinementNotes && result.refinementNotes.length > 0 && (
+            <p className="mt-2 rounded-soft bg-ivory px-3 py-2 text-xs leading-relaxed text-cocoa">
+              {result.refinementNotes.join(' ')}
+            </p>
+          )}
 
           <ul className="mt-5 grid gap-4 md:grid-cols-3">
             {result.proposals.map((p, i) => {
@@ -312,6 +337,37 @@ export function LookStudio() {
                       </Button>
                     </div>
 
+                    {/*
+                      Ajuste em linguagem natural sobre ESTE look.
+                      O resto das pecas fica travado, entao "inclua cinto
+                      vermelho" muda uma coisa so, em vez de sortear tudo de novo.
+                    */}
+                    <div className="mt-3 border-t border-sand/60 pt-3">
+                      <span className="eyebrow block pb-1.5">Ajustar com suas palavras</span>
+                      <div className="flex gap-1.5">
+                        <input
+                          value={ajuste[p.outfitId] ?? ''}
+                          onChange={(e) => setAjuste((prev) => ({ ...prev, [p.outfitId]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.code === 'Enter' || e.code === 'NumpadEnter') aplicarAjuste(p)
+                          }}
+                          placeholder="inclua cinto vermelho"
+                          className="min-w-0 flex-1 rounded-soft border border-sand bg-transparent px-2.5 py-2 text-xs placeholder:text-mist focus:border-clay focus:outline-none"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => aplicarAjuste(p)}
+                          disabled={ajustando !== null || !(ajuste[p.outfitId] ?? '').trim()}
+                        >
+                          {ajustando === p.outfitId ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Wand2 className="size-3.5" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                     {swapRole === p.outfitId && (
                       <div className="mt-3 flex flex-wrap gap-1.5 border-t border-sand/60 pt-3">
                         {p.items.map(({ role }) => (

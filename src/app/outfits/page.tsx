@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Plus } from 'lucide-react'
 import { getContext } from '@/services/context'
 import { ItemThumb } from '@/components/ui/item-thumb'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -25,8 +26,19 @@ export default async function OutfitsPage({
 
   return (
     <div className="rise">
-      <p className="eyebrow">{outfits.length === 1 ? '1 look salvo' : `${outfits.length} looks salvos`}</p>
-      <h1 className="display mt-2 text-3xl md:text-4xl">Meus looks</h1>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">{outfits.length === 1 ? '1 look salvo' : `${outfits.length} looks salvos`}</p>
+          <h1 className="display mt-2 text-3xl md:text-4xl">Meus looks</h1>
+        </div>
+        <Link
+          href="/outfits/add"
+          className="inline-flex shrink-0 items-center gap-2 rounded-full bg-espresso px-5 py-3 text-sm text-bone transition-colors hover:bg-cocoa"
+        >
+          <Plus className="size-4" />
+          Add look
+        </Link>
+      </div>
 
       <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
         <FilterLink label="Todos" href="/outfits" active={!style} />
@@ -39,7 +51,7 @@ export default async function OutfitsPage({
         <EmptyState
           className="mt-8"
           title="Nenhum look salvo ainda"
-          description="Monte um look e toque em Salvar para guardá-lo aqui."
+          description="Monte um look e toque em Salvar, ou envie a foto de um look que você já montou."
           actionLabel="Montar meu look"
           actionHref="/create-look"
         />

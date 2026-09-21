@@ -72,5 +72,9 @@ export const generateLookRequestSchema = z.object({
   exclude_item_ids: z.array(z.string()).default([]),
   /** Apetite por combinacoes menos obvias. */
   novelty: noveltySchema.default('equilibrado'),
+  /** Ajuste escrito a mao: "inclua sapato vermelho", "troca a camisa pela blusa". */
+  instruction: z.string().max(300).optional(),
+  /** Look que serve de base para o ajuste; o resto das pecas fica travado. */
+  base_outfit_id: z.string().optional(),
 })
 export type GenerateLookRequest = z.infer<typeof generateLookRequestSchema>

@@ -126,6 +126,13 @@ export function archetypesOf(item: WardrobeItem): GarmentArchetype[] {
       break
     case 'joia':
     case 'bijuteria':
+    case 'brinco':
+    case 'colar':
+    case 'anel':
+    case 'pulseira':
+      out.push('jewelry')
+      break
+    case 'lenco':
       out.push('jewelry')
       break
     case 'cinto':

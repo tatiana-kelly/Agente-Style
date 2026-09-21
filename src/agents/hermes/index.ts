@@ -4,6 +4,7 @@ import type { OutfitProposal } from '@/agents/outfit-agent'
 import { resolveStyleIntent } from '@/agents/style-agent'
 import { runWardrobeAgent } from '@/agents/wardrobe-agent'
 import { runOutfitAgent } from '@/agents/outfit-agent'
+import { faltantes, parseRefinement } from '@/agents/style-agent/refine'
 import type { EngineContext } from '@/lib/outfits/engine'
 import { runImageDirector } from '@/agents/image-director'
 import { runQualityControl } from '@/agents/quality-control'
@@ -23,6 +24,8 @@ export interface HermesResult extends HermesResponse {
   missingRoles?: string[]
   imageWarning?: string
   costUsd?: number
+  /** O que foi entendido do ajuste escrito, para confirmar de volta. */
+  refinementNotes?: string[]
 }
 
 /**
@@ -81,6 +84,46 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
     const recentSignatures = recent.map((o) => o.items.map((i) => i.wardrobe_item_id).sort().join('|'))
     const recentFormulaIds = recent.map((o) => String(o.scores?.formula_id ?? '')).filter(Boolean)
 
+    // Ajuste escrito a mao sobre um look existente (§3 do pedido).
+    let lockedItemIds = [...request.locked_item_ids]
+    let excludeIds = [...request.exclude_item_ids]
+    const refinementNotes: string[] = []
+
+    if (request.instruction?.trim()) {
+      const refino = parseRefinement(request.instruction, items)
+      const naoTem = faltantes(request.instruction, items)
+
+      if (request.base_outfit_id) {
+        const base = await repo.getOutfit(request.userId, request.base_outfit_id)
+        if (base) {
+          const byId = new Map(items.map((i) => [i.id, i]))
+          // Papeis que a instrucao vai preencher nao podem ficar travados no
+          // valor antigo, senao "troca o sapato" nao troca nada.
+          const papeisNovos = new Set(
+            refino.includeIds.map((id) => byId.get(id)?.category).filter(Boolean) as string[],
+          )
+          lockedItemIds = base.items
+            .map((i) => i.wardrobe_item_id)
+            .filter((id) => {
+              if (refino.excludeIds.includes(id)) return false
+              const cat = byId.get(id)?.category
+              return !(cat && papeisNovos.has(cat))
+            })
+        }
+      }
+
+      lockedItemIds = [...new Set([...lockedItemIds, ...refino.includeIds])]
+      excludeIds = [...new Set([...excludeIds, ...refino.excludeIds])]
+      refinementNotes.push(...refino.notes)
+
+      if (naoTem.length > 0) {
+        refinementNotes.push(`Não achei no seu guarda-roupa: ${naoTem.join('; ')}.`)
+      }
+      if (refino.unresolved && naoTem.length === 0) {
+        refinementNotes.push('Não entendi o ajuste, então mantive o look como estava.')
+      }
+    }
+
     const engineCtx: EngineContext = {
       style: intent.style,
       occasion: intent.occasion,
@@ -91,8 +134,8 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       preferredArchetypes: [],
       modestyLevel: intent.modestyLevel,
       preferenceWeights,
-      lockedItemIds: request.locked_item_ids,
-      excludeIds: request.exclude_item_ids,
+      lockedItemIds,
+      excludeIds,
       novelty: intent.novelty,
       recentSignatures,
       recentItemIds,
@@ -156,6 +199,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       ],
       scores: outfit.primary.scores as unknown as Record<string, number>,
       missingRoles: outfit.missingRoles,
+      refinementNotes: refinementNotes.length > 0 ? refinementNotes : undefined,
     }
 
     // 6. Imagem: só quando pedida e só se couber no orçamento (PRP §59)

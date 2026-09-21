@@ -2,7 +2,7 @@ import type { WardrobeItem } from '@/schemas/wardrobe'
 import type { OutfitRole } from '@/schemas/outfit'
 import { generateCandidates, signature, type EngineContext, type OutfitCandidate } from '@/lib/outfits/engine'
 import { describeRelation } from '@/lib/outfits/color-engine'
-import { occasionLabel, styleLabel } from '@/lib/labels'
+import { occasionLabel, roleLabel, styleLabel } from '@/lib/labels'
 
 export interface OutfitProposal {
   items: Array<{ item: WardrobeItem; role: OutfitRole }>
@@ -105,7 +105,14 @@ function explain(candidate: OutfitCandidate, ctx: EngineContext): string {
     partes.push('Seu guarda-roupa não tinha a combinação ideal para este pedido, então flexibilizei a formalidade para fechar um look completo.')
   }
   if (candidate.unmetRoles.length > 0) {
-    partes.push(`Faltou ${candidate.unmetRoles.join(' e ')} no guarda-roupa para completar esta fórmula.`)
+    // Nome de papel é chave interna; o que a pessoa lê precisa ser português.
+    const faltando: Record<string, string> = {
+      top: 'uma parte de cima', bottom: 'uma parte de baixo', shoes: 'um calçado',
+      dress: 'um vestido', outerwear: 'uma sobreposição',
+      accessory: 'um acessório', bag: 'uma bolsa',
+    }
+    const lista = candidate.unmetRoles.map((r) => faltando[r] ?? roleLabel(r).toLowerCase())
+    partes.push(`Falta ${lista.join(' e ')} no seu guarda-roupa para fechar este look.`)
   }
 
   return partes.join(' ')

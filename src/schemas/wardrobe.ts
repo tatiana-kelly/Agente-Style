@@ -14,7 +14,12 @@ export const SUBCATEGORIES = {
   dress: ['vestido', 'macacao'],
   outerwear: ['jaqueta', 'blazer', 'casaco', 'cardiga', 'corta-vento'],
   shoes: ['tenis', 'tenis-corrida', 'tenis-tenis', 'sapatilha', 'salto', 'sandalia', 'bota', 'sapato', 'chinelo'],
-  accessory: ['cinto', 'relogio', 'oculos', 'bone', 'viseira', 'chapeu', 'joia', 'bijuteria', 'meia', 'faixa'],
+  accessory: [
+    'cinto', 'relogio', 'oculos', 'bone', 'viseira', 'chapeu', 'meia', 'faixa',
+    // Joias separadas: "joia" generico nao deixava pedir brinco nem combinar
+    // colar com brinco no mesmo look.
+    'joia', 'bijuteria', 'brinco', 'colar', 'anel', 'pulseira', 'lenco',
+  ],
   bag: ['bolsa', 'mochila', 'necessaire', 'raqueteira'],
 } as const satisfies Record<Category, readonly string[]>
 

@@ -65,12 +65,42 @@ export const SUBCATEGORY_LABELS: Record<string, string> = {
   sapato: 'Sapato', chinelo: 'Chinelo',
   cinto: 'Cinto', relogio: 'Relógio', oculos: 'Óculos', bone: 'Boné',
   viseira: 'Viseira', chapeu: 'Chapéu', joia: 'Joia', bijuteria: 'Bijuteria',
-  meia: 'Meia', faixa: 'Faixa',
+  meia: 'Meia', faixa: 'Faixa', brinco: 'Brinco', colar: 'Colar',
+  anel: 'Anel', pulseira: 'Pulseira', lenco: 'Lenço',
   bolsa: 'Bolsa', mochila: 'Mochila', necessaire: 'Necessaire', raqueteira: 'Raqueteira',
 }
 
 export function subcategoryLabel(value: string): string {
   return SUBCATEGORY_LABELS[value] ?? titleCase(value)
+}
+
+/** Subcategorias femininas — o resto é tratado como masculino. */
+const FEMININAS = new Set([
+  'camisa', 'camiseta', 'blusa', 'regata', 'polo', 'calca', 'saia', 'legging',
+  'bermuda', 'bota', 'sandalia', 'sapatilha', 'bolsa', 'mochila', 'viseira',
+  'meia', 'faixa', 'joia', 'bijuteria', 'pulseira', 'necessaire', 'raqueteira',
+  'jaqueta', 'chinelo',
+])
+
+/** Cores que flexionam em gênero. As demais são invariáveis (cinza, verde, bege). */
+const CORES_FLEXIVEIS: Record<string, string> = {
+  preto: 'preta', branco: 'branca', vermelho: 'vermelha', amarelo: 'amarela',
+  roxo: 'roxa', claro: 'clara', escuro: 'escura', amarelado: 'amarelada',
+}
+
+/**
+ * Nome da peça com concordância.
+ * Sem isto o cadastro gerava "Camisa preto" e "Calca preto" — o produto
+ * inteiro parece descuidado quando o nome da peça está errado.
+ */
+export function garmentName(subcategory: string, color: string): string {
+  const base = subcategoryLabel(subcategory)
+  const cor = color.trim().toLowerCase()
+  if (!cor) return base
+
+  const feminina = FEMININAS.has(subcategory)
+  const flexionada = feminina ? (CORES_FLEXIVEIS[cor] ?? cor) : cor
+  return `${base} ${flexionada}`
 }
 
 export function occasionLabel(value: string): string {

@@ -187,7 +187,8 @@ function buildFromFormula(
   if (complete.length === 0) return []
 
   return complete.map((p) => {
-    const withExtras = addOptional(p.picks, items, formula, ctx, tier, p.used)
+    let withExtras = addOptional(p.picks, items, formula, ctx, tier, p.used)
+    withExtras = garantirTravadas(withExtras, locked)
     const palette = analyzePalette(
       withExtras.filter((x) => !['accessory', 'bag'].includes(x.role)).map((x) => x.item.color),
     )
@@ -202,6 +203,22 @@ function buildFromFormula(
   })
 }
 
+/** Quantas peças cada papel opcional pode contribuir. */
+const MAX_POR_PAPEL: Partial<Record<OutfitRole, number>> = {
+  accessory: 3,
+  bag: 1,
+  outerwear: 1,
+}
+
+/**
+ * Slot padrão de acessório, usado quando a fórmula não declara nenhum.
+ * Um look completo tem acessório; a fórmula descreve a base, não o acabamento.
+ */
+const ACESSORIO_PADRAO: FormulaSlot = {
+  role: 'accessory',
+  archetypes: ['jewelry', 'watch', 'belt', 'sunglasses', 'visor', 'cap'],
+}
+
 function addOptional(
   base: Array<{ item: WardrobeItem; role: OutfitRole; slotAffinity: number }>,
   items: WardrobeItem[],
@@ -213,26 +230,71 @@ function addOptional(
   const result = [...base]
   const taken = new Set(used)
 
-  for (const slot of formula.optional_roles) {
-    // Sobreposição só entra quando a fórmula a exige ou faz frio; não forçar.
+  const slots = [...formula.optional_roles]
+  // Sem acessório na fórmula, usa o padrão: a pessoa quer o look terminado.
+  if (!slots.some((s) => s.role === 'accessory')) slots.push(ACESSORIO_PADRAO)
+
+  for (const slot of slots) {
+    // Sobreposição não é acabamento: só entra se fizer frio ou a fórmula exigir.
     if (slot.role === 'outerwear' && !ctx.season?.includes('inverno')) continue
 
-    const picks = candidatesForSlot(items, slot, ctx, tier, taken)
-    if (picks.length === 0) continue
+    const limite = MAX_POR_PAPEL[slot.role] ?? 1
+    const familiasUsadas = new Set<string>()
+    let adicionados = 0
 
-    const best = picks
+    const ordenados = candidatesForSlot(items, slot, ctx, tier, taken)
       .map((p) => {
         const harmony = Math.min(...result.map((r) => colorCompatibility(r.item.color, p.item.color)))
-        return { ...p, value: p.affinity * 0.5 + (harmony / 3) * 0.5 }
+        return { ...p, value: p.affinity * 0.45 + (harmony / 3) * 0.55 }
       })
-      .sort((a, b) => b.value - a.value)[0]
+      .sort((a, b) => b.value - a.value)
 
-    if (best && best.value >= 0.5) {
-      result.push({ item: best.item, role: slot.role, slotAffinity: best.affinity })
-      taken.add(best.item.id)
+    for (const candidato of ordenados) {
+      if (adicionados >= limite) break
+      // Limiar mais baixo que o original (0.5): acessório neutro quase sempre
+      // funciona, e sem isto o look voltava sem brinco, cinto nem bolsa.
+      if (candidato.value < 0.4) continue
+      // Não empilhar três colares: uma peça por família de acessório.
+      const familia = familiaDoAcessorio(candidato.item.subcategory)
+      if (familiasUsadas.has(familia)) continue
+
+      result.push({ item: candidato.item, role: slot.role, slotAffinity: candidato.affinity })
+      taken.add(candidato.item.id)
+      familiasUsadas.add(familia)
+      adicionados++
     }
   }
   return result
+}
+
+/**
+ * Peça travada pela pessoa entra sempre.
+ *
+ * `addOptional` só olha os slots da fórmula, então um blazer pedido à mão ficava
+ * de fora quando a fórmula não previa sobreposição — e "inclua blazer" não
+ * incluía blazer nenhum. Pedido explícito vence a fórmula.
+ */
+function garantirTravadas(
+  picks: Array<{ item: WardrobeItem; role: OutfitRole; slotAffinity: number }>,
+  locked: WardrobeItem[],
+): Array<{ item: WardrobeItem; role: OutfitRole; slotAffinity: number }> {
+  const presentes = new Set(picks.map((p) => p.item.id))
+  const faltando = locked.filter((l) => !presentes.has(l.id))
+  if (faltando.length === 0) return picks
+
+  return [
+    ...picks,
+    ...faltando.map((item) => ({ item, role: item.category as OutfitRole, slotAffinity: 1 })),
+  ]
+}
+
+/** Agrupa acessórios que ocupam o mesmo lugar no corpo. */
+function familiaDoAcessorio(subcategoria: string): string {
+  if (['joia', 'bijuteria', 'colar', 'lenco'].includes(subcategoria)) return 'pescoco'
+  if (['brinco'].includes(subcategoria)) return 'orelha'
+  if (['anel', 'pulseira', 'relogio'].includes(subcategoria)) return 'maos'
+  if (['bone', 'viseira', 'chapeu'].includes(subcategoria)) return 'cabeca'
+  return subcategoria
 }
 
 // ────────────────────────────────────────────────────────────────── ranking
