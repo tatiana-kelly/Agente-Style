@@ -155,6 +155,28 @@ regex faz. A frase livre **sobrepõe** o estilo marcado na tela.
 | "Quero algo elegante para jantar" | jantar · elegante |
 | "Quero algo diferente" | novelty = ousado |
 
+## Três opções, imagem sob demanda
+
+O motor devolve 3 composições distintas. `diversify` impede que sejam a mesma
+peça-âncora com sapato trocado.
+
+A imagem **não** é gerada para as três: sairiam US$ 0,57 por pedido para mostrar
+duas que a pessoa talvez nem escolha. Cada cartão tem "Ver em mim", e
+`POST /api/outfits/[id]/image` reaproveita imagem já gerada em vez de pagar de novo.
+
+## Fidelidade da explicação
+
+A explicação cita as peças reais e o princípio de styling, nunca o nome da
+fórmula — o nome usa arquétipos ("pantalona") que podem não descrever a peça que
+entrou ("calça de alfaiataria").
+
+Duas travas impedem que a explicação invente roupa:
+
+1. Fórmula cuja identidade é a sobreposição **exige** a sobreposição. Se a peça
+   que dá nome à fórmula pode faltar, a fórmula está errada.
+2. `descricaoConfere` omite a descrição quando ela cita blazer, casaco, cardigã,
+   joia, bolsa ou salto que não está no look.
+
 ## Custo
 
 **Zero.** Toda esta camada é determinística. IA continua entrando só para ler a

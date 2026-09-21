@@ -18,7 +18,8 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | Storage | ✅ **testado** | 5 buckets privados, upload 201, download 200, público 400, token adulterado 400 |
 | Auth | ✅ **testada** | Login, sessão, rota protegida, logout, redirect pós-logout |
 | Wardrobe | ✅ **real** | CREATE 20, READ, UPDATE, DELETE (soft) contra Supabase |
-| AI classification | ✅ **real** | `text-vision` em produção: US$ 0,0015, 8,7 s, `source: openai` |
+| AI classification | ✅ **real** | Visão OpenAI, **multi-peça**: uma foto com blusa+calça vira 2 cadastros |
+| Editar peça | ✅ | Trocar foto, reler dados da foto nova, corrigir campos, remover |
 | Hermes | ✅ **real** | Pipeline completo, `agent_runs` gravado; ~620 ms quente em produção |
 | Style Agent | ✅ | Sem custo de IA |
 | Outfit Agent | ✅ **real** | Outfit Intelligence Engine: 54 fórmulas, busca em 5 camadas |
