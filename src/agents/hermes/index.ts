@@ -4,6 +4,7 @@ import type { OutfitProposal } from '@/agents/outfit-agent'
 import { resolveStyleIntent } from '@/agents/style-agent'
 import { runWardrobeAgent } from '@/agents/wardrobe-agent'
 import { runOutfitAgent } from '@/agents/outfit-agent'
+import type { EngineContext } from '@/lib/outfits/engine'
 import { runImageDirector } from '@/agents/image-director'
 import { runQualityControl } from '@/agents/quality-control'
 import { getImageProvider } from '@/lib/ai/image-provider'
@@ -35,8 +36,9 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
 
   try {
     // 1. Contexto do usuário
-    const [profile, preferences, items, photo] = await Promise.all([
+    const [profile, styleProfile, preferences, items, photo] = await Promise.all([
       repo.getProfile(request.userId),
+      repo.getStyleProfile(request.userId),
       repo.listPreferences(request.userId),
       repo.listItems(request.userId),
       repo.getPrimaryPhoto(request.userId),
@@ -52,9 +54,11 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       occasion: request.occasion,
       context: request.context,
       weather: request.weather,
+      profile: styleProfile,
+      novelty: request.novelty,
     })
 
-    // 3. Wardrobe Agent — filtra o que existe de verdade
+    // 3. Wardrobe Agent — diagnostico do acervo disponivel
     const wardrobe = runWardrobeAgent({
       items,
       intent,
@@ -64,29 +68,50 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       excludeIds: request.exclude_item_ids,
     })
 
-    // 4. Outfit Agent — monta 1 principal + alternativas
+    // 4. Outfit Intelligence Engine — fórmula, cor, perfil, histórico
     const preferenceWeights: Record<string, number> = {}
     for (const p of preferences) {
       if (p.preference_type === 'liked_item') preferenceWeights[p.value] = p.weight
       if (p.preference_type === 'disliked_item') preferenceWeights[p.value] = -Math.abs(p.weight)
     }
 
-    const outfit = runOutfitAgent({
-      items,
-      intent,
-      lockedItemIds: request.locked_item_ids,
-      excludeIds: request.exclude_item_ids,
+    // Historico recente alimenta a penalidade de repeticao (§17).
+    const recent = await repo.listRecentOutfits(request.userId, 8)
+    const recentItemIds = recent.flatMap((o) => o.items.map((i) => i.wardrobe_item_id))
+    const recentSignatures = recent.map((o) => o.items.map((i) => i.wardrobe_item_id).sort().join('|'))
+    const recentFormulaIds = recent.map((o) => String(o.scores?.formula_id ?? '')).filter(Boolean)
+
+    const engineCtx: EngineContext = {
+      style: intent.style,
+      occasion: intent.occasion,
+      season: intent.season,
+      formalityOverride: intent.formalityOverride,
       favoriteColors: profile?.favorite_colors ?? [],
       avoidColors: profile?.avoid_colors ?? [],
+      preferredArchetypes: [],
+      modestyLevel: intent.modestyLevel,
       preferenceWeights,
-      count: 3,
-    })
+      lockedItemIds: request.locked_item_ids,
+      excludeIds: request.exclude_item_ids,
+      novelty: intent.novelty,
+      recentSignatures,
+      recentItemIds,
+      recentFormulaIds,
+    }
+
+    const outfit = runOutfitAgent(items, engineCtx, 3)
 
     if (!outfit.primary) {
+      // Diagnostico acionavel em vez de "nao foi possivel" (§27).
+      const faltando = outfit.missingRoles.length > 0 ? outfit.missingRoles : wardrobe.missing_roles
+      const nomes: Record<string, string> = {
+        top: 'uma parte de cima', bottom: 'uma parte de baixo', shoes: 'um calçado',
+        dress: 'um vestido', outerwear: 'uma sobreposição', accessory: 'um acessório', bag: 'uma bolsa',
+      }
       return fail(
-        wardrobe.missing_roles.length > 0
-          ? `Não consegui fechar um look de ${request.style}: faltam peças para ${wardrobe.missing_roles.join(', ')}.`
-          : 'Não encontrei combinação adequada com as peças disponíveis.',
+        faltando.length > 0
+          ? `Para fechar um look de ${request.style} falta ${faltando.map((r) => nomes[r] ?? r).join(' e ')} no seu guarda-roupa.`
+          : `Suas peças de ${request.style} não fecham um look completo. Cadastre mais uma peça de baixo ou um calçado adequado.`,
       )
     }
 
@@ -98,7 +123,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       occasion: intent.occasion,
       context: request.context,
       explanation: outfit.primary.explanation,
-      scores: outfit.primary.scores as unknown as Record<string, number>,
+      scores: { ...outfit.primary.scores, formula_id: outfit.primary.formulaId } as unknown as Record<string, number>,
       status: 'draft',
       items: outfit.primary.items.map((i) => ({ wardrobe_item_id: i.item.id, role: i.role })),
     })
@@ -112,7 +137,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
           occasion: intent.occasion,
           context: request.context,
           explanation: alt.explanation,
-          scores: alt.scores as unknown as Record<string, number>,
+          scores: { ...alt.scores, formula_id: alt.formulaId } as unknown as Record<string, number>,
           status: 'draft',
           items: alt.items.map((i) => ({ wardrobe_item_id: i.item.id, role: i.role })),
         }),

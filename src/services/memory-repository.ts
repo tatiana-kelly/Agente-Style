@@ -1,6 +1,7 @@
 import { classificationSchema, type CreateWardrobeItemInput, type WardrobeItem } from '@/schemas/wardrobe'
 import type { Outfit, Style } from '@/schemas/outfit'
 import type { UserPhoto, UserPreference, UserProfile } from '@/schemas/user'
+import { defaultStyleProfile, styleProfileSchema, type StyleProfile } from '@/schemas/style-profile'
 import { newId } from '@/lib/utils'
 import { buildDemoWardrobe, DEMO_USER_EMAIL, DEMO_USER_ID, DEMO_USER_PHOTO } from '@/data/demo-wardrobe'
 import type {
@@ -17,6 +18,7 @@ interface UserState {
   runs: AgentRunRecord[]
   usage: Array<AiUsageRecord & { at: string }>
   photo: UserPhoto | null
+  styleProfile: StyleProfile
 }
 
 /**
@@ -50,6 +52,7 @@ export class MemoryRepository implements Repository {
         preferences: [],
         runs: [],
         usage: [],
+        styleProfile: defaultStyleProfile(userId),
         photo: {
           id: newId('photo'),
           user_id: userId,
@@ -138,6 +141,18 @@ export class MemoryRepository implements Repository {
     return s.profile
   }
 
+  async getStyleProfile(userId: string) {
+    return this.state(userId).styleProfile
+  }
+
+  async updateStyleProfile(userId: string, patch: Partial<StyleProfile>) {
+    const st = this.state(userId)
+    st.styleProfile = styleProfileSchema.parse({
+      ...st.styleProfile, ...patch, updated_at: new Date().toISOString(),
+    })
+    return st.styleProfile
+  }
+
   async getPrimaryPhoto(userId: string) {
     return this.state(userId).photo
   }
@@ -183,6 +198,10 @@ export class MemoryRepository implements Repository {
 
   async getOutfit(userId: string, id: string) {
     return this.state(userId).outfits.find((o) => o.id === id) ?? null
+  }
+
+  async listRecentOutfits(userId: string, limit: number) {
+    return this.state(userId).outfits.slice(0, limit)
   }
 
   async markOutfitSaved(userId: string, id: string) {
@@ -242,6 +261,11 @@ export class MemoryRepository implements Repository {
   ): Promise<StoredImage> {
     // Sem Storage no modo demo: a imagem volta embutida e aparece na tela do mesmo jeito.
     return inlineImage(data, contentType)
+  }
+
+  async syncFormulas(): Promise<number> {
+    // Sem banco no modo demo: a biblioteca ja vive em codigo.
+    return 0
   }
 
   async logAgentRun(record: AgentRunRecord) {

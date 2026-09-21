@@ -86,6 +86,42 @@ export const STYLE_RULES: Record<Style, StyleRule> = {
     preferredSubcategories: { top: ['top-esportivo', 'regata', 'camiseta'], bottom: ['legging', 'shorts'], shoes: ['tenis-corrida', 'tenis'] },
     defaultOccasion: 'treino',
   },
+  igreja: {
+    formality: [5, 9], idealFormality: 6.5,
+    requiredRoles: ['top', 'bottom', 'shoes'], optionalRoles: ['outerwear', 'accessory', 'bag'],
+    preferredSportTypes: ['nenhum'],
+    // Modestia: nada esportivo nem curto demais. A saia midi e a peca ancora.
+    forbiddenSubcategories: [...SOCIAL_FORBIDDEN, 'shorts', 'top-esportivo', 'regata'],
+    preferredSubcategories: {
+      top: ['blusa', 'camisa', 'sueter'],
+      bottom: ['saia', 'calca'],
+      dress: ['vestido'],
+      shoes: ['sapatilha', 'salto', 'sapato'],
+      outerwear: ['blazer', 'cardiga'],
+    },
+    defaultOccasion: 'igreja',
+  },
+  elegante: {
+    formality: [6, 10], idealFormality: 7.5,
+    requiredRoles: ['top', 'bottom', 'shoes'], optionalRoles: ['outerwear', 'accessory', 'bag'],
+    preferredSportTypes: ['nenhum'], forbiddenSubcategories: SOCIAL_FORBIDDEN,
+    preferredSubcategories: { top: ['blusa', 'camisa'], bottom: ['saia', 'calca'], shoes: ['salto', 'sapatilha'] },
+    defaultOccasion: 'evento',
+  },
+  feminino: {
+    formality: [4, 9], idealFormality: 6,
+    requiredRoles: ['top', 'bottom', 'shoes'], optionalRoles: ['outerwear', 'accessory', 'bag'],
+    preferredSportTypes: ['nenhum'], forbiddenSubcategories: ['top-esportivo', 'legging', 'tenis-corrida'],
+    preferredSubcategories: { top: ['blusa'], bottom: ['saia'], dress: ['vestido'], shoes: ['sapatilha', 'salto', 'sandalia'] },
+    defaultOccasion: 'passeio',
+  },
+  moderno: {
+    formality: [3, 8], idealFormality: 5,
+    requiredRoles: ['top', 'bottom', 'shoes'], optionalRoles: ['outerwear', 'accessory', 'bag'],
+    preferredSportTypes: [], forbiddenSubcategories: [],
+    preferredSubcategories: { top: ['camiseta', 'blusa', 'camisa'], bottom: ['calca', 'saia'], shoes: ['tenis', 'sapatilha'], outerwear: ['blazer'] },
+    defaultOccasion: 'passeio',
+  },
   tenis: {
     formality: [0, 3], idealFormality: 1,
     requiredRoles: ['top', 'bottom', 'shoes'], optionalRoles: ['accessory', 'bag', 'outerwear'],

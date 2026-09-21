@@ -6,7 +6,7 @@ import { Heart, Loader2, RefreshCw, Replace, Save, Sparkles } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { ItemThumb } from '@/components/ui/item-thumb'
-import { STYLES, type Style } from '@/schemas/outfit'
+import { NOVELTY_LEVELS, STYLES, type NoveltyLevel, type Style } from '@/schemas/outfit'
 import { OCCASIONS } from '@/schemas/wardrobe'
 import type { WardrobeItem } from '@/schemas/wardrobe'
 import { occasionLabel, roleLabel, styleLabel } from '@/lib/labels'
@@ -44,6 +44,7 @@ export function LookStudio() {
   const [style, setStyle] = useState<Style | null>(initialStyle)
   const [occasion, setOccasion] = useState<string | null>(null)
   const [context, setContext] = useState('')
+  const [novelty, setNovelty] = useState<NoveltyLevel>('equilibrado')
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<LookResponse | null>(null)
@@ -79,6 +80,7 @@ export function LookStudio() {
           occasion: occasion ?? undefined,
           context: context.trim() || undefined,
           render_image: true,
+          novelty,
           exclude_item_ids: options.excludeIds ?? [],
           locked_item_ids: options.lockedIds ?? [],
         }),
@@ -161,6 +163,30 @@ export function LookStudio() {
           placeholder="Quero usar minha saia preta. É de manhã e vai fazer calor."
           className="mt-3 w-full resize-none rounded-soft border border-sand bg-transparent px-4 py-3 text-sm placeholder:text-mist focus:border-clay focus:outline-none"
         />
+      </section>
+
+      <section className="mt-8">
+        <h2 className="display text-2xl">Quanto quero ousar?</h2>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {NOVELTY_LEVELS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={novelty === n}
+              onClick={() => setNovelty(n)}
+              className={`rounded-soft border px-3 py-3 text-sm capitalize transition-colors ${
+                novelty === n ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-mist">
+          {novelty === 'classico' && 'Combinações consagradas, sem surpresa.'}
+          {novelty === 'equilibrado' && 'Seguro, com espaço para uma escolha menos óbvia.'}
+          {novelty === 'ousado' && 'Combinações menos previsíveis, usando o que você tem.'}
+        </p>
       </section>
 
       <Button

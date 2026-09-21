@@ -1,6 +1,7 @@
 import type { WardrobeItem, CreateWardrobeItemInput } from '@/schemas/wardrobe'
 import type { Outfit, OutfitRole, Style } from '@/schemas/outfit'
 import type { UserProfile, UserPreference, UserPhoto } from '@/schemas/user'
+import type { StyleProfile } from '@/schemas/style-profile'
 import type { BucketName, StoredImage } from './image-service'
 
 export interface SaveOutfitInput {
@@ -64,12 +65,16 @@ export interface Repository {
 
   getProfile(userId: string): Promise<UserProfile | null>
   updateProfile(userId: string, patch: Partial<UserProfile>): Promise<UserProfile | null>
+  getStyleProfile(userId: string): Promise<StyleProfile | null>
+  updateStyleProfile(userId: string, patch: Partial<StyleProfile>): Promise<StyleProfile>
   getPrimaryPhoto(userId: string): Promise<UserPhoto | null>
   setPrimaryPhoto(userId: string, imageUrl: string): Promise<UserPhoto>
 
   saveOutfit(input: SaveOutfitInput): Promise<Outfit>
   listOutfits(userId: string, style?: Style): Promise<Outfit[]>
   getOutfit(userId: string, id: string): Promise<Outfit | null>
+  /** Ultimos looks montados (salvos ou nao), para nao repetir combinacao (§17). */
+  listRecentOutfits(userId: string, limit: number): Promise<Outfit[]>
   markOutfitSaved(userId: string, id: string): Promise<boolean>
 
   saveGeneratedLook(record: Omit<GeneratedLookRecord, 'id' | 'created_at'>): Promise<GeneratedLookRecord>
@@ -90,6 +95,9 @@ export interface Repository {
     data: Buffer,
     contentType: string,
   ): Promise<StoredImage>
+
+  /** Espelha a biblioteca de formulas do codigo na tabela. Idempotente. */
+  syncFormulas(rows: Array<Record<string, unknown>>): Promise<number>
 
   logAgentRun(record: AgentRunRecord): Promise<void>
   logAiUsage(record: AiUsageRecord): Promise<void>

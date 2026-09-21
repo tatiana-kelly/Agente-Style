@@ -9,6 +9,8 @@ export type OutfitRole = (typeof OUTFIT_ROLES)[number]
 export const STYLES = [
   'social', 'casual', 'esporte', 'tenis', 'trabalho',
   'evento', 'viagem', 'jantar', 'festa', 'dia-a-dia',
+  // Intencoes que o produto precisava expressar e nao conseguia.
+  'igreja', 'elegante', 'feminino', 'moderno',
 ] as const
 export type Style = (typeof STYLES)[number]
 export const styleSchema = z.enum(STYLES)
@@ -45,6 +47,11 @@ export const outfitScoresSchema = z.object({
 })
 export type OutfitScores = z.infer<typeof outfitScoresSchema>
 
+/** Quanto o usuario quer arriscar (PRP §18). */
+export const NOVELTY_LEVELS = ['classico', 'equilibrado', 'ousado'] as const
+export type NoveltyLevel = (typeof NOVELTY_LEVELS)[number]
+export const noveltySchema = z.enum(NOVELTY_LEVELS)
+
 export const generateLookRequestSchema = z.object({
   style: styleSchema,
   occasion: occasionSchema.optional(),
@@ -63,5 +70,7 @@ export const generateLookRequestSchema = z.object({
   locked_item_ids: z.array(z.string()).default([]),
   /** Peças a evitar nesta nova tentativa. */
   exclude_item_ids: z.array(z.string()).default([]),
+  /** Apetite por combinacoes menos obvias. */
+  novelty: noveltySchema.default('equilibrado'),
 })
 export type GenerateLookRequest = z.infer<typeof generateLookRequestSchema>

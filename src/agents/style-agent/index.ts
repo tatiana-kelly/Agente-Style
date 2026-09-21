@@ -1,6 +1,10 @@
-import type { Style } from '@/schemas/outfit'
+import type { NoveltyLevel, Style } from '@/schemas/outfit'
 import { ruleFor } from '@/lib/wardrobe/style-rules'
 import { SEASONS } from '@/schemas/wardrobe'
+import { extractContext } from './nlp'
+import {
+  formalityForContext, modestyForContext, type StyleProfile,
+} from '@/schemas/style-profile'
 
 export interface StyleIntent {
   style: Style
@@ -13,6 +17,14 @@ export interface StyleIntent {
   /** Subcategorias citadas no texto livre ("quero usar minha saia preta"). */
   requestedSubcategories: string[]
   notes: string[]
+  /** Faixa vinda do dress code do usuario; sobrepoe a regra generica do estilo. */
+  formalityOverride?: [number, number]
+  /** Exigencia de cobertura, 0..3. */
+  modestyLevel: number
+  /** Apetite por combinacoes menos obvias. */
+  novelty: NoveltyLevel
+  /** O que foi entendido da frase livre, para a UI poder confirmar. */
+  understood: ReturnType<typeof extractContext>
 }
 
 const PERIOD_HINTS: Array<{ re: RegExp; note: string }> = [
@@ -40,12 +52,34 @@ export function resolveStyleIntent(input: {
   occasion?: string
   context?: string
   weather?: { temperature?: number; rain?: boolean }
+  profile?: StyleProfile | null
+  novelty?: NoveltyLevel
 }): StyleIntent {
-  const rule = ruleFor(input.style)
   const context = input.context ?? ''
   const notes: string[] = []
 
-  let [min, max] = rule.formality
+  // A frase livre pode redefinir estilo e ocasiao: "vou a igreja" vale mais
+  // que o estilo que veio marcado na tela.
+  const understood = extractContext(context)
+  const style = understood.style ?? input.style
+  const occasion = input.occasion ?? understood.occasion
+
+  const rule = ruleFor(style)
+  let [min, max] = formalityForContext(input.profile ?? null, style) ?? rule.formality
+  const formalityOverride = formalityForContext(input.profile ?? null, style)
+
+  if (understood.style && understood.style !== input.style) {
+    notes.push(`Entendi pelo texto que a ocasião é ${understood.style}.`)
+  }
+  if (understood.elevated && max < 10) {
+    max = Math.min(10, max + 1)
+    min = Math.min(min + 1, max)
+    notes.push('Compromisso importante: subi um ponto de formalidade.')
+  }
+  if (understood.period === 'noite' && max < 10) {
+    max = Math.min(10, max + 1)
+  }
+  if (understood.day) notes.push(`Anotei: ${understood.day}.`)
 
   for (const hint of PERIOD_HINTS) {
     if (hint.re.test(context)) notes.push(hint.note)
@@ -66,14 +100,21 @@ export function resolveStyleIntent(input: {
   }
   if (weather?.rain) notes.push('Chuva: evitar calçado aberto e tecido delicado.')
 
+  const novelty: NoveltyLevel = understood.wantsNovelty ? 'ousado' : (input.novelty ?? 'equilibrado')
+  if (understood.wantsNovelty) notes.push('Você pediu algo diferente — fui menos óbvio na combinação.')
+
   return {
-    style: input.style,
-    occasion: input.occasion ?? rule.defaultOccasion,
+    style,
+    occasion: occasion ?? rule.defaultOccasion,
     season: detectSeason(context, weather?.temperature),
     formality: [min, max],
     requestedColors: extractMatches(context, COLOR_HINTS).map(normalizeColorWord),
     requestedSubcategories: extractMatches(context, SUBCATEGORY_HINTS).map(normalizeSubcategory),
     notes,
+    formalityOverride,
+    modestyLevel: modestyForContext(input.profile ?? null, style),
+    novelty,
+    understood,
   }
 }
 

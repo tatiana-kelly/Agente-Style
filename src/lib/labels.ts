@@ -17,6 +17,7 @@ export const OCCASION_LABELS: Record<string, string> = {
   'dia-comum': 'Dia comum',
   trabalho: 'Trabalho',
   passeio: 'Passeio',
+  igreja: 'Igreja',
 }
 
 export const STYLE_LABELS: Record<Style, string> = {
@@ -30,6 +31,10 @@ export const STYLE_LABELS: Record<Style, string> = {
   jantar: 'Jantar',
   festa: 'Festa',
   'dia-a-dia': 'Dia a dia',
+  igreja: 'Igreja',
+  elegante: 'Elegante',
+  feminino: 'Feminino',
+  moderno: 'Moderno',
 }
 
 export const ROLE_LABELS: Record<OutfitRole, string> = {

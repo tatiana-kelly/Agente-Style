@@ -1,109 +1,110 @@
 import type { WardrobeItem } from '@/schemas/wardrobe'
-import type { OutfitRole, OutfitScores } from '@/schemas/outfit'
-import { composeOutfits, type ComposedOutfit } from '@/lib/outfits/composer'
-import { colorFamily, isNeutral } from '@/lib/wardrobe/colors'
-import type { StyleIntent } from '@/agents/style-agent'
+import type { OutfitRole } from '@/schemas/outfit'
+import { generateCandidates, signature, type EngineContext, type OutfitCandidate } from '@/lib/outfits/engine'
+import { describeRelation } from '@/lib/outfits/color-engine'
 import { occasionLabel, styleLabel } from '@/lib/labels'
-
-export interface OutfitAgentInput {
-  items: WardrobeItem[]
-  intent: StyleIntent
-  lockedItemIds: string[]
-  excludeIds: string[]
-  favoriteColors: string[]
-  avoidColors: string[]
-  preferenceWeights: Record<string, number>
-  count?: number
-}
 
 export interface OutfitProposal {
   items: Array<{ item: WardrobeItem; role: OutfitRole }>
-  scores: OutfitScores
+  scores: Record<string, number>
   explanation: string
   name: string
+  formulaId: string
+  formulaName: string
+  tier: number
+  signature: string
 }
 
 export interface OutfitAgentOutput {
   primary: OutfitProposal | null
   alternatives: OutfitProposal[]
   missingRoles: OutfitRole[]
+  tierUsed: number
+  formulasTried: number
 }
 
-/** Monta o conjunto e escreve a justificativa. Nenhuma chamada de modelo aqui. */
-export function runOutfitAgent(input: OutfitAgentInput): OutfitAgentOutput {
-  const composed = composeOutfits(input.items, {
-    style: input.intent.style,
-    occasion: input.intent.occasion,
-    season: input.intent.season,
-    excludeIds: input.excludeIds,
-    lockedItemIds: input.lockedItemIds,
-    favoriteColors: [...input.favoriteColors, ...input.intent.requestedColors],
-    avoidColors: input.avoidColors,
-    preferenceWeights: input.preferenceWeights,
-    count: input.count ?? 3,
-  })
-
-  const proposals = composed.map((c) => toProposal(c, input.intent))
+/**
+ * Monta o conjunto e escreve a justificativa.
+ * Nenhuma chamada de modelo: o motor sabe POR QUE escolheu, então a explicação
+ * é derivada do motivo real e não de prosa gerada (§28).
+ */
+export function runOutfitAgent(items: WardrobeItem[], ctx: EngineContext, count = 3): OutfitAgentOutput {
+  const result = generateCandidates(items, ctx, count)
+  const proposals = result.candidates.map((c) => toProposal(c, ctx))
 
   return {
     primary: proposals[0] ?? null,
     alternatives: proposals.slice(1),
-    missingRoles: composed[0]?.missingRoles ?? [],
+    missingRoles: result.missingRoles,
+    tierUsed: result.tierUsed,
+    formulasTried: result.formulasTried,
   }
 }
 
-function toProposal(composed: ComposedOutfit, intent: StyleIntent): OutfitProposal {
+function toProposal(candidate: OutfitCandidate, ctx: EngineContext): OutfitProposal {
+  const anchor = candidate.items.find((i) => i.role === 'dress' || i.role === 'top')?.item
+  const base = anchor ? anchor.name : styleLabel(ctx.style)
+
   return {
-    items: composed.items,
-    scores: composed.scores,
-    explanation: explain(composed, intent),
-    name: buildName(composed, intent),
+    items: candidate.items.map((i) => ({ item: i.item, role: i.role })),
+    scores: candidate.scores as unknown as Record<string, number>,
+    explanation: explain(candidate, ctx),
+    name: `${base} · ${occasionLabel(ctx.occasion ?? ctx.style)}`,
+    formulaId: candidate.formula.id,
+    formulaName: candidate.formula.name,
+    tier: candidate.tier,
+    signature: signature(candidate),
   }
-}
-
-function buildName(composed: ComposedOutfit, intent: StyleIntent): string {
-  const anchor = composed.items.find((i) => i.role === 'dress' || i.role === 'top')?.item
-  const base = anchor ? anchor.name : styleLabel(intent.style)
-  return `${base} · ${occasionLabel(intent.occasion)}`
 }
 
 /**
- * Explicação determinística.
- * O usuário quer entender a escolha — não precisa de prosa gerada por modelo para isso.
+ * A explicação encadeia: a fórmula que guiou, a relação de cor encontrada e o
+ * papel do calçado. Tudo vem de dado real da peça — nada é inventado sobre a roupa.
  */
-function explain(composed: ComposedOutfit, intent: StyleIntent): string {
-  const parts: string[] = []
-  const items = composed.items.map((i) => i.item)
+function explain(candidate: OutfitCandidate, ctx: EngineContext): string {
+  const partes: string[] = []
+  const { formula, palette } = candidate
 
-  const shoes = composed.items.find((i) => i.role === 'shoes')?.item
-  const anchor = composed.items.find((i) => i.role === 'dress' || i.role === 'top')?.item
+  const anchor = candidate.items.find((i) => i.role === 'dress' || i.role === 'top')?.item
+  const bottom = candidate.items.find((i) => i.role === 'bottom')?.item
+  const shoes = candidate.items.find((i) => i.role === 'shoes')?.item
 
-  if (anchor) {
-    parts.push(`Comecei pela ${anchor.name.toLowerCase()}, que atende bem a ${occasionLabel(intent.occasion).toLowerCase()}.`)
+  const ocasiao = occasionLabel(ctx.occasion ?? ctx.style).toLowerCase()
+
+  if (anchor && bottom) {
+    partes.push(
+      `Parti da fórmula "${formula.name.toLowerCase()}": ${anchor.name.toLowerCase()} com ${bottom.name.toLowerCase()}.`,
+    )
+  } else if (anchor) {
+    partes.push(`Escolhi ${anchor.name.toLowerCase()} como peça única, seguindo a fórmula "${formula.name.toLowerCase()}".`)
   }
 
-  const neutrals = items.filter((i) => isNeutral(i.color))
-  if (neutrals.length >= 2) {
-    parts.push('A base neutra mantém o conjunto coeso e fácil de usar.')
-  } else {
-    const families = [...new Set(items.map((i) => colorFamily(i.color)))].filter((f) => f !== 'desconhecido')
-    if (families.length <= 2) parts.push('A paleta ficou curta e alinhada, sem disputa entre as cores.')
-  }
+  partes.push(`${capitalize(formula.description)}`)
+
+  // Cor: dizer QUAL relação, não só "combina".
+  partes.push(`As cores formam ${describeRelation(palette.dominant)}.`)
 
   if (shoes) {
     if (shoes.sport_type === 'tenis') {
-      parts.push(`O ${shoes.name.toLowerCase()} é o calçado correto para quadra — solado e estabilidade certos.`)
+      partes.push(`O ${shoes.name.toLowerCase()} é o calçado correto para quadra — solado e estabilidade certos.`)
+    } else if (shoes.formality >= 7) {
+      partes.push(`O ${shoes.name.toLowerCase()} sustenta a formalidade pedida por ${ocasiao}.`)
     } else {
-      parts.push(`Fechei com ${shoes.name.toLowerCase()}, que acompanha a formalidade do resto.`)
+      partes.push(`Fechei com ${shoes.name.toLowerCase()}, que mantém o conjunto no registro certo.`)
     }
   }
 
-  const extras = composed.items.filter((i) => i.role === 'accessory' || i.role === 'bag')
-  if (extras.length > 0) {
-    parts.push(`Acrescentei ${extras.map((e) => e.item.name.toLowerCase()).join(' e ')} para completar sem pesar.`)
+  // Ser honesto quando a resposta veio de um plano B.
+  if (candidate.tier >= 3) {
+    partes.push('Seu guarda-roupa não tinha a combinação ideal para este pedido, então flexibilizei a formalidade para fechar um look completo.')
+  }
+  if (candidate.unmetRoles.length > 0) {
+    partes.push(`Faltou ${candidate.unmetRoles.join(' e ')} no guarda-roupa para completar esta fórmula.`)
   }
 
-  if (intent.notes.length > 0) parts.push(intent.notes[0])
+  return partes.join(' ')
+}
 
-  return parts.join(' ')
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }

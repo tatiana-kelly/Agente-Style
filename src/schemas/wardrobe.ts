@@ -31,6 +31,8 @@ export const FORMALITY_MAX = 10
 export const OCCASIONS = [
   'reuniao', 'almoco', 'jantar', 'partida-tenis', 'treino', 'viagem',
   'evento', 'festa', 'dia-comum', 'trabalho', 'passeio',
+  // Igreja nao existia e o pedido "vou a igreja" morria na validacao com 422.
+  'igreja',
 ] as const
 
 export const categorySchema = z.enum(CATEGORIES)

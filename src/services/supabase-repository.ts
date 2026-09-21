@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { classificationSchema, type CreateWardrobeItemInput, type WardrobeItem } from '@/schemas/wardrobe'
 import type { Outfit, OutfitRole, Style } from '@/schemas/outfit'
 import type { UserPhoto, UserPreference, UserProfile } from '@/schemas/user'
+import { defaultStyleProfile, styleProfileSchema, type StyleProfile } from '@/schemas/style-profile'
 import type {
   AgentRunRecord, AiUsageRecord, GeneratedLookRecord, Repository, SaveOutfitInput,
 } from './repository'
@@ -127,6 +128,24 @@ export class SupabaseRepository implements Repository {
     return (data as UserProfile) ?? null
   }
 
+  async getStyleProfile(userId: string): Promise<StyleProfile | null> {
+    const { data, error } = await this.db
+      .from('style_profiles').select('*').eq('user_id', userId).maybeSingle()
+    if (error) throw error
+    // Sem linha ainda: devolve o padrao para o motor nao ficar sem contexto.
+    return data ? styleProfileSchema.parse(data) : defaultStyleProfile(userId)
+  }
+
+  async updateStyleProfile(userId: string, patch: Partial<StyleProfile>): Promise<StyleProfile> {
+    const { data, error } = await this.db
+      .from('style_profiles')
+      .upsert({ ...patch, user_id: userId, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      .select('*')
+      .single()
+    if (error) throw error
+    return styleProfileSchema.parse(data)
+  }
+
   async getPrimaryPhoto(userId: string): Promise<UserPhoto | null> {
     const { data, error } = await this.db
       .from('user_photos')
@@ -212,6 +231,17 @@ export class SupabaseRepository implements Repository {
     return data ? mapOutfitRow(data) : null
   }
 
+  async listRecentOutfits(userId: string, limit: number): Promise<Outfit[]> {
+    const { data, error } = await this.db
+      .from('outfits')
+      .select('*, outfit_items(wardrobe_item_id, role)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (error) throw error
+    return (data ?? []).map(mapOutfitRow)
+  }
+
   async markOutfitSaved(userId: string, id: string): Promise<boolean> {
     const { error, count } = await this.db
       .from('outfits')
@@ -283,6 +313,14 @@ export class SupabaseRepository implements Repository {
     contentType: string,
   ): Promise<StoredImage> {
     return uploadUserFile(this.db, bucket, userId, fileName, data, contentType)
+  }
+
+  async syncFormulas(rows: Array<Record<string, unknown>>): Promise<number> {
+    const { error, count } = await this.db
+      .from('outfit_formulas')
+      .upsert(rows, { onConflict: 'id', count: 'exact' })
+    if (error) throw error
+    return count ?? rows.length
   }
 
   async logAgentRun(record: AgentRunRecord): Promise<void> {
