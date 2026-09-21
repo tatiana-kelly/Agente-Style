@@ -147,7 +147,7 @@ decidida, pontuada e gravada.
 
 | Tipo | Quantidade | Resultado |
 |---|---|---|
-| Unitários e integração | 66 | ✅ offline |
+| Unitários e integração | 119 | ✅ offline |
 | Typecheck / Lint / Build | — | ✅ 0 erros |
 | E2E manual local | 15 passos | ✅ |
 | **E2E manual em produção** | login → guarda-roupa → look → troca → salvar → meus looks → logout | ✅ |
@@ -197,11 +197,27 @@ Fixei `regions: ["gru1"]` em `vercel.json`:
 | **Total por look com imagem** | **~US$ 0,19** |
 | Supabase | US$ 10/mês |
 | Vercel | US$ 0 (Hobby) |
-| **Gasto real de IA até aqui** | **US$ 0,19** (1 classificação + 1 imagem) |
+| **Gasto real de IA até aqui** | **US$ 1,3637** (7 imagens + 22 classificações) |
 
 Freios: US$ 0,50 por requisição, US$ 5,00 por usuário/dia, 2 retries no máximo.
 
 ---
+
+## OUTFIT INTELLIGENCE ENGINE
+
+Camada de montagem reescrita. O motor anterior descartava papéis obrigatórios em
+silêncio e devolvia looks sem parte de baixo; o novo desce em camadas relaxando o
+filtro, e nunca entrega um look que não veste a pessoa.
+
+| | |
+|---|---|
+| Fórmulas de styling | 54 ativas, 9 categorias, origem declarada |
+| Relações de cor | 9, com nota 0–3 |
+| Dimensões do ranker | 8 |
+| Camadas de fallback | 5 |
+| Custo da camada | **US$ 0,00** — tudo determinístico |
+
+Detalhe em [`docs/OUTFIT-ENGINE.md`](docs/OUTFIT-ENGINE.md).
 
 ## PROBLEMAS ENCONTRADOS E CORRIGIDOS
 

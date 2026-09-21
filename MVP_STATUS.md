@@ -4,6 +4,9 @@ Atualizado em 20/09/2026, após a fase de execução real.
 
 **Status geral: MVP REAL DEPLOYADO E VALIDADO EM PRODUCAO.**
 
+Os 6 cenários do §33 passam em produção. Bug de look incompleto corrigido com
+regressão. Detalhe do motor em [`docs/OUTFIT-ENGINE.md`](docs/OUTFIT-ENGINE.md).
+
 Producao: <https://wardrobe-ai-xi-six.vercel.app>
 Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 
@@ -18,13 +21,16 @@ Repositorio: <https://github.com/tatiana-kelly/Agente-Style>
 | AI classification | ✅ **real** | `text-vision` em produção: US$ 0,0015, 8,7 s, `source: openai` |
 | Hermes | ✅ **real** | Pipeline completo, `agent_runs` gravado; ~620 ms quente em produção |
 | Style Agent | ✅ | Sem custo de IA |
-| Outfit Agent | ✅ **real** | 5 peças reais + 2 alternativas, confiança 1.0 |
+| Outfit Agent | ✅ **real** | Outfit Intelligence Engine: 54 fórmulas, busca em 5 camadas |
+| Color engine | ✅ | 9 relações, nota 0–3, paleta com penalidade do pior par |
+| Perfil de estilo | ✅ | Dress code por contexto (trabalho/igreja/tênis) + modéstia |
+| Linguagem natural | ✅ | Frase livre sobrepõe o estilo marcado na tela |
 | Image Director | ✅ | Prompt, referências e negativos de identidade |
 | Image generation | ✅ **real** | `gpt-image-1` em produção: US$ 0,19, 44,9 s, 5 peças corretas |
 | Quality Control | ✅ **real (visão)** | Auditou a imagem gerada: score 0,950, 1 tentativa, 0 ressalvas |
 | Saved Looks | ✅ **real** | 4 looks salvos e listados em produção |
 | Preferences | ✅ **real** | 7 preferências em 4 tipos |
-| Tests | ✅ | 66 testes, todos offline |
+| Tests | ✅ | 119 testes, todos offline |
 | Security | ✅ **auditada** | 0 alertas no Supabase, 0 segredos no bundle do cliente, 0 no histórico git |
 | Build | ✅ | Produção compila com env real, 18 rotas + proxy |
 | Deployment | ✅ **em produção** | Vercel `gru1`, alias ativo, git conectado (push = deploy) |
