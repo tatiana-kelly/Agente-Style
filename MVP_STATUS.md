@@ -77,3 +77,22 @@ fotografar 5 peças com foto.
 `teste@wardrobe.ai` / `WardrobeTest!2026` — confirmada, com 19 peças e 4 looks.
 Existe também `intruso@wardrobe.ai` / `Intruso!2026`, usada só para provar a RLS.
 Ambas podem ser apagadas no painel do Supabase quando não forem mais úteis.
+
+## Importação em lote (foto com várias peças)
+
+Uma foto com N peças vira N itens, cada um com seu próprio recorte.
+
+Fluxo: detectar (1 chamada de visão, `detail: high`, ~US$ 0,002 por foto) → caixas
+normalizadas → deduplicação por sobreposição (IoU ≥ 0,6, nunca por atributo) →
+recorte no navegador sobre o bitmap em resolução cheia → remoção de fundo
+algorítmica quando o fundo é liso → revisão → cada item salvo em arquivo próprio
+(UUID), com a foto de origem guardada uma vez e referenciada em `metadata`.
+
+Medição em produção (12 sapatos sintéticos, grade 4×3): 12/12 detectados, cores
+corretas, IoU médio 0,66; as caixas saem curtas à direita. Margem padrão de 20%
+contém 12/12 peças (pior caso 96%). A fatia do sapato vizinho que a margem traz é
+descartada na remoção de fundo quando toca a borda e tem menos de 35% da peça.
+
+Limites: remoção de fundo só em fundo liso (cama, chão, parede) e peça com
+contraste; caso contrário mantém o fundo e avisa. Na revisão há "Ampliar recorte"
+e "Usar foto inteira" para correção manual.
