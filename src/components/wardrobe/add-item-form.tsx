@@ -31,7 +31,7 @@ interface Peca extends DetectedGarment {
   erro?: string
 }
 
-const MARGEM_INICIAL = 0.08
+const MARGEM_INICIAL = 0.2
 const PASSO_MARGEM = 0.15
 
 /** Cede a vez ao navegador entre recortes, para a tela não congelar com 15 peças. */

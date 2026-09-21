@@ -64,7 +64,7 @@ export function cropPiece(
   box: Box | null,
   opts: { pad?: number; maxSide?: number; removerFundo?: boolean } = {},
 ): Crop {
-  const pad = opts.pad ?? 0.08
+  const pad = opts.pad ?? 0.2
   const maxSide = opts.maxSide ?? 900
   const efetiva = box ? padBox(box, pad) : FULL_BOX
 

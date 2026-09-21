@@ -194,3 +194,66 @@ describe('remoção de fundo uniforme', () => {
     expect(b.x + b.w).toBeLessThanOrEqual(62)
   })
 })
+
+/** Desenha retângulos de "peça" sobre fundo liso: [x0, y0, x1, y1] em pixels. */
+function cena(w: number, h: number, blocos: Array<[number, number, number, number]>): Uint8ClampedArray {
+  const px = new Uint8ClampedArray(w * h * 4)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4
+      const dentro = blocos.some(([x0, y0, x1, y1]) => x >= x0 && x < x1 && y >= y0 && y < y1)
+      const cor = dentro ? [30, 30, 40] : [240, 238, 232]
+      px[i] = cor[0]
+      px[i + 1] = cor[1]
+      px[i + 2] = cor[2]
+      px[i + 3] = 255
+    }
+  }
+  return px
+}
+
+const alfa = (r: ReturnType<typeof removeUniformBackground>, w: number, x: number, y: number) =>
+  r.data![(y * w + x) * 4 + 3]
+
+describe('margem generosa sem trazer o vizinho', () => {
+  it('descarta pedaço de peça vizinha que entra pela borda', () => {
+    const w = 100
+    const h = 100
+    // peça principal no meio + fatia do sapato vizinho encostada na borda direita
+    const px = cena(w, h, [[25, 30, 70, 75], [92, 40, 100, 60]])
+    const r = removeUniformBackground(px, w, h)
+    expect(r.applied).toBe(true)
+    expect(alfa(r, w, 47, 52)).toBe(255) // peça principal fica
+    expect(alfa(r, w, 96, 50)).toBe(0) // fragmento do vizinho sai
+  })
+
+  it('NÃO descarta o segundo pé do par (bloco grande, fora da borda)', () => {
+    const w = 120
+    const h = 100
+    // dois pés do mesmo tamanho, separados, nenhum tocando a borda
+    const px = cena(w, h, [[15, 30, 52, 75], [66, 30, 103, 75]])
+    const r = removeUniformBackground(px, w, h)
+    expect(r.applied).toBe(true)
+    expect(alfa(r, w, 30, 50)).toBe(255)
+    expect(alfa(r, w, 85, 50)).toBe(255)
+  })
+
+  it('NÃO descarta a peça principal mesmo quando ela encosta na borda', () => {
+    const w = 100
+    const h = 100
+    // recorte apertado: a peça toca a borda esquerda, e é o maior bloco
+    const px = cena(w, h, [[0, 25, 60, 75]])
+    const r = removeUniformBackground(px, w, h)
+    expect(r.applied).toBe(true)
+    expect(alfa(r, w, 30, 50)).toBe(255)
+  })
+
+  it('segundo pé grande que encosta na borda também fica', () => {
+    const w = 120
+    const h = 100
+    const px = cena(w, h, [[15, 30, 55, 75], [80, 30, 120, 75]])
+    const r = removeUniformBackground(px, w, h)
+    expect(r.applied).toBe(true)
+    expect(alfa(r, w, 100, 50)).toBe(255)
+  })
+})

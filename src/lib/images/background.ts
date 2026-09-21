@@ -75,9 +75,13 @@ export function removeUniformBackground(
   const bg = [median(rs), median(gs), median(bs)] as const
 
   // 2. O fundo é liso? Se as bordas variam demais, não há "cor de fundo".
-  let spread = 0
-  for (let k = 0; k < rs.length; k++) spread += dist(rs[k], gs[k], bs[k], bg[0], bg[1], bg[2])
-  spread /= rs.length
+  //    Percentil 70, não média: com a margem generosa, a peça (ou a fatia do
+  //    vizinho) encosta na borda e, pela média, um fundo liso passaria por
+  //    textura. Até ~30% da borda ocupada por peça não conta como irregular.
+  const desvios: number[] = []
+  for (let k = 0; k < rs.length; k++) desvios.push(dist(rs[k], gs[k], bs[k], bg[0], bg[1], bg[2]))
+  desvios.sort((a, b) => a - b)
+  const spread = desvios[Math.floor(desvios.length * 0.7)] ?? 0
   if (spread > maxBorderSpread) return { applied: false, reason: 'fundo-irregular', removedRatio: 0 }
 
   // 3. A peça se distingue do fundo? Camisa branca em lençol branco: não arriscar.
@@ -137,7 +141,17 @@ export function removeUniformBackground(
     if (y < height - 1) tryPush(x, y + 1)
   }
 
-  const removedRatio = tail / total
+  // 4b. Fragmento de peça vizinha. O recorte leva margem generosa porque a caixa
+  //     do modelo encurta a peça (medido: sem margem, 1 em cada 4 sapatos saía
+  //     cortado). A margem, em troca, traz para dentro um pedaço do sapato ao
+  //     lado. Esse pedaço tem assinatura clara: entra PELA BORDA e é pequeno.
+  //     O segundo pé do par também é um bloco separado, mas fica no meio e tem
+  //     tamanho de pé — por isso só se descarta o que toca a borda E é pequeno.
+  descartarFragmentosDeBorda(isBg, width, height)
+
+  let removidos = 0
+  for (let p = 0; p < total; p++) if (isBg[p]) removidos++
+  const removedRatio = removidos / total
 
   // 5. Sanidade: removeu quase nada, ou quase tudo — nos dois casos algo deu errado.
   if (removedRatio < 0.05) return { applied: false, reason: 'sobrou-quase-tudo', removedRatio }
@@ -162,6 +176,70 @@ export function removeUniformBackground(
   }
 
   return { applied: true, data: out, removedRatio }
+}
+
+/**
+ * Marca como fundo os blocos de "peça" que tocam a borda do recorte e são
+ * pequenos perto do maior bloco. Altera `isBg` no lugar.
+ */
+export function descartarFragmentosDeBorda(
+  isBg: Uint8Array,
+  width: number,
+  height: number,
+  limiteRelativo = 0.35,
+): number {
+  const total = width * height
+  const rotulo = new Int32Array(total).fill(-1)
+  const fila = new Int32Array(total)
+  const tamanhos: number[] = []
+  const tocaBorda: boolean[] = []
+
+  for (let inicio = 0; inicio < total; inicio++) {
+    if (isBg[inicio] || rotulo[inicio] !== -1) continue
+    const id = tamanhos.length
+    let head = 0
+    let tail = 0
+    let tamanho = 0
+    let borda = false
+    rotulo[inicio] = id
+    fila[tail++] = inicio
+
+    while (head < tail) {
+      const p = fila[head++]
+      tamanho++
+      const x = p % width
+      const y = (p - x) / width
+      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) borda = true
+
+      const vizinhos = [
+        x > 0 ? p - 1 : -1,
+        x < width - 1 ? p + 1 : -1,
+        y > 0 ? p - width : -1,
+        y < height - 1 ? p + width : -1,
+      ]
+      for (const v of vizinhos) {
+        if (v < 0 || isBg[v] || rotulo[v] !== -1) continue
+        rotulo[v] = id
+        fila[tail++] = v
+      }
+    }
+    tamanhos.push(tamanho)
+    tocaBorda.push(borda)
+  }
+
+  if (tamanhos.length <= 1) return 0
+  const maior = Math.max(...tamanhos)
+
+  const descartar = new Set<number>()
+  tamanhos.forEach((t, id) => {
+    if (tocaBorda[id] && t < maior * limiteRelativo) descartar.add(id)
+  })
+  if (descartar.size === 0) return 0
+
+  for (let p = 0; p < total; p++) {
+    if (rotulo[p] !== -1 && descartar.has(rotulo[p])) isBg[p] = 1
+  }
+  return descartar.size
 }
 
 /** Menor retângulo que contém os pixels visíveis — para não sobrar moldura vazia. */
