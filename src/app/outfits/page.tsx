@@ -1,10 +1,9 @@
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { getContext } from '@/services/context'
-import { ItemThumb } from '@/components/ui/item-thumb'
 import { EmptyState } from '@/components/ui/empty-state'
-import { formatDate } from '@/lib/utils'
-import { occasionLabel, styleLabel } from '@/lib/labels'
+import { styleLabel } from '@/lib/labels'
+import { SavedLooks } from '@/components/outfits/saved-looks'
 import { styleSchema } from '@/schemas/outfit'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +22,15 @@ export default async function OutfitsPage({
   const { user, repo } = await getContext()
   const [outfits, items] = await Promise.all([repo.listOutfits(user.id, style), repo.listItems(user.id)])
   const byId = new Map(items.map((i) => [i.id, i]))
+  const imagens = await repo.getGeneratedLooksFor(user.id, outfits.map((o) => o.id))
+
+  const looks = outfits.map((outfit) => ({
+    outfit,
+    imagem: imagens.get(outfit.id) ?? null,
+    pecas: outfit.items
+      .map((oi) => ({ role: oi.role as string, item: byId.get(oi.wardrobe_item_id) }))
+      .filter((x): x is { role: string; item: NonNullable<typeof x.item> } => Boolean(x.item)),
+  }))
 
   return (
     <div className="rise">
@@ -56,36 +64,7 @@ export default async function OutfitsPage({
           actionHref="/create-look"
         />
       ) : (
-        <ul className="mt-6 grid gap-4 md:grid-cols-2">
-          {outfits.map((outfit) => (
-            <li key={outfit.id} className="rounded-card border border-sand/70 bg-ivory/40 p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="truncate font-medium">{outfit.name}</p>
-                <span className="shrink-0 text-xs text-mist">{formatDate(outfit.created_at)}</span>
-              </div>
-              <p className="mt-1 text-xs text-mist">
-                {styleLabel(outfit.style)}
-                {outfit.occasion ? ` · ${occasionLabel(outfit.occasion)}` : ''}
-              </p>
-
-              <ul className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">
-                {outfit.items.map((oi) => {
-                  const item = byId.get(oi.wardrobe_item_id)
-                  if (!item) return null
-                  return (
-                    <li key={oi.wardrobe_item_id} className="size-16 shrink-0 overflow-hidden rounded-soft" title={item.name}>
-                      <ItemThumb item={item} />
-                    </li>
-                  )
-                })}
-              </ul>
-
-              {outfit.explanation && (
-                <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-cocoa">{outfit.explanation}</p>
-              )}
-            </li>
-          ))}
-        </ul>
+        <SavedLooks looks={looks} />
       )}
     </div>
   )

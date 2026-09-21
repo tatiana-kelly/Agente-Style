@@ -120,7 +120,27 @@ export function LookStudio() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outfit_id: p.outfitId, action }),
     })
-    setFeedback(action === 'saved' ? 'Look salvo em Meus looks.' : 'Anotado — vou usar isso nas próximas sugestões.')
+
+    if (action !== 'saved') {
+      setFeedback('Anotado — vou usar isso nas próximas sugestões.')
+      return
+    }
+
+    // Look salvo é look guardado VESTIDO: sem a foto no corpo, Meus Looks vira
+    // um mosaico de peças soltas. A geração é paga, mas salvar é um ato
+    // deliberado — não acontece nas três opções, só na que ela escolheu.
+    if (imagens[p.outfitId]) {
+      setFeedback('Look salvo em Meus looks.')
+      return
+    }
+
+    setFeedback('Look salvo. Criando a foto com você vestindo…')
+    const ok = await verEmMim(p)
+    setFeedback(
+      ok
+        ? 'Look salvo em Meus looks, com a foto no corpo.'
+        : 'Look salvo em Meus looks. A foto no corpo não saiu agora — dá para gerar depois em Meus looks.',
+    )
   }
 
   /** Ajuste escrito sobre um look existente. */
@@ -137,8 +157,8 @@ export function LookStudio() {
   }
 
   /** A imagem custa; só gera a do look que a pessoa escolheu ver. */
-  async function verEmMim(p: Proposal) {
-    if (imagens[p.outfitId] || gerando) return
+  async function verEmMim(p: Proposal): Promise<boolean> {
+    if (imagens[p.outfitId]) return true
     setGerando(p.outfitId)
     setError(null)
     try {
@@ -146,8 +166,10 @@ export function LookStudio() {
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error ?? 'Não consegui gerar a imagem.')
       setImagens((prev) => ({ ...prev, [p.outfitId]: payload.imageUrl }))
+      return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao gerar a imagem.')
+      return false
     } finally {
       setGerando(null)
     }

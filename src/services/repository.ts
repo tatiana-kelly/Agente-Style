@@ -79,6 +79,8 @@ export interface Repository {
 
   saveGeneratedLook(record: Omit<GeneratedLookRecord, 'id' | 'created_at'>): Promise<GeneratedLookRecord>
   getGeneratedLook(userId: string, outfitId: string): Promise<GeneratedLookRecord | null>
+  /** Imagem de varios looks numa consulta so, para a lista de Meus Looks. */
+  getGeneratedLooksFor(userId: string, outfitIds: string[]): Promise<Map<string, string>>
 
   listPreferences(userId: string): Promise<UserPreference[]>
   upsertPreference(userId: string, type: string, value: string, weightDelta: number): Promise<UserPreference>

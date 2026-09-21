@@ -276,6 +276,29 @@ export class SupabaseRepository implements Repository {
     return { ...look, image_url: signed.get(look.image_url) ?? look.image_url }
   }
 
+  async getGeneratedLooksFor(userId: string, outfitIds: string[]): Promise<Map<string, string>> {
+    const mapa = new Map<string, string>()
+    if (outfitIds.length === 0) return mapa
+
+    const { data, error } = await this.db
+      .from('generated_looks')
+      .select('outfit_id, image_url, created_at')
+      .eq('user_id', userId)
+      .in('outfit_id', outfitIds)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+
+    const refs = (data ?? []).map((r) => r.image_url as string | null)
+    const assinadas = await signRefs(this.db, refs)
+
+    for (const row of data ?? []) {
+      const ref = row.image_url as string | null
+      if (!ref || mapa.has(row.outfit_id)) continue
+      mapa.set(row.outfit_id, assinadas.get(ref) ?? ref)
+    }
+    return mapa
+  }
+
   async listPreferences(userId: string): Promise<UserPreference[]> {
     const { data, error } = await this.db.from('user_preferences').select('*').eq('user_id', userId)
     if (error) throw error

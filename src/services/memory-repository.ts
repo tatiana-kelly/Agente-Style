@@ -225,6 +225,16 @@ export class MemoryRepository implements Repository {
     return this.state(userId).looks.find((l) => l.outfit_id === outfitId) ?? null
   }
 
+  async getGeneratedLooksFor(userId: string, outfitIds: string[]) {
+    const mapa = new Map<string, string>()
+    for (const look of this.state(userId).looks) {
+      if (look.image_url && outfitIds.includes(look.outfit_id) && !mapa.has(look.outfit_id)) {
+        mapa.set(look.outfit_id, look.image_url)
+      }
+    }
+    return mapa
+  }
+
   async listPreferences(userId: string) {
     return this.state(userId).preferences
   }
