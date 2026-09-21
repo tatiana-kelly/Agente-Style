@@ -25,7 +25,13 @@ export async function GET() {
   }
 }
 
-/** Sincroniza a biblioteca de código para a tabela. Idempotente. */
+/**
+ * Sincroniza a biblioteca de código para a tabela. Idempotente.
+ *
+ * Em regime normal a RLS bloqueia esta escrita de propósito: a biblioteca é
+ * conhecimento compartilhado e não pode ser alterada pelo cliente. O seed é uma
+ * operação administrativa — abrir a policy, sincronizar, fechar de novo.
+ */
 export async function POST() {
   try {
     const { repo } = await getContext()

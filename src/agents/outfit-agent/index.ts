@@ -71,15 +71,16 @@ function explain(candidate: OutfitCandidate, ctx: EngineContext): string {
 
   const ocasiao = occasionLabel(ctx.occasion ?? ctx.style).toLowerCase()
 
+  // A prosa cita as PEÇAS REAIS e o princípio, nunca o nome da fórmula: o nome
+  // usa arquétipos ("pantalona") que podem não descrever a peça que entrou
+  // ("calça de alfaiataria"), e soaria como se eu estivesse inventando a roupa.
   if (anchor && bottom) {
-    partes.push(
-      `Parti da fórmula "${formula.name.toLowerCase()}": ${anchor.name.toLowerCase()} com ${bottom.name.toLowerCase()}.`,
-    )
+    partes.push(`Montei ${anchor.name.toLowerCase()} com ${bottom.name.toLowerCase()}.`)
   } else if (anchor) {
-    partes.push(`Escolhi ${anchor.name.toLowerCase()} como peça única, seguindo a fórmula "${formula.name.toLowerCase()}".`)
+    partes.push(`Escolhi ${anchor.name.toLowerCase()} como peça única.`)
   }
 
-  partes.push(`${capitalize(formula.description)}`)
+  partes.push(capitalize(formula.description))
 
   // Cor: dizer QUAL relação, não só "combina".
   partes.push(`As cores formam ${describeRelation(palette.dominant)}.`)
