@@ -28,6 +28,10 @@ export async function POST(request: Request) {
 
     return ok({
       items: result.items,
+      // Compatibilidade: abas abertas antes da deteccao de varias pecas ainda
+      // rodam o JS antigo, que le `classification`. Sem isto elas quebram com
+      // "reading 'subcategory'" ate a pessoa recarregar.
+      classification: result.items[0],
       source: result.source,
       warning: result.warning,
     })
