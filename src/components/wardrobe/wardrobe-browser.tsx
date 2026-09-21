@@ -8,6 +8,7 @@ import { Chip } from '@/components/ui/chip'
 import { ItemThumb } from '@/components/ui/item-thumb'
 import { EmptyState } from '@/components/ui/empty-state'
 import { titleCase } from '@/lib/utils'
+import { subcategoryLabel } from '@/lib/labels'
 
 /** Filtros da tela de guarda-roupa (PRP §25). */
 const FILTERS = [
@@ -99,7 +100,7 @@ export function WardrobeBrowser({ initialItems }: { initialItems: WardrobeItem[]
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{item.name}</p>
                     <p className="mt-0.5 truncate text-xs text-mist">
-                      {titleCase(item.subcategory)} · {titleCase(item.color)}
+                      {subcategoryLabel(item.subcategory)} · {titleCase(item.color)}
                     </p>
                   </div>
                   {/*

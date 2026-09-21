@@ -8,7 +8,7 @@ import {
   ALL_SUBCATEGORIES, CATEGORIES, OCCASIONS, SPORT_TYPES, type Classification,
 } from '@/schemas/wardrobe'
 import { titleCase } from '@/lib/utils'
-import { occasionLabel } from '@/lib/labels'
+import { occasionLabel, subcategoryLabel } from '@/lib/labels'
 import { downscale } from '@/lib/image-client'
 
 type Step = 'capture' | 'classifying' | 'review' | 'saving'
@@ -258,6 +258,6 @@ function Select({
 }
 
 function suggestName(c: Classification): string {
-  return `${titleCase(c.subcategory)} ${c.color}`.trim()
+  return `${subcategoryLabel(c.subcategory)} ${c.color}`.trim()
 }
 

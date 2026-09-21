@@ -11,7 +11,7 @@ import {
   type Classification, type WardrobeItem,
 } from '@/schemas/wardrobe'
 import { titleCase } from '@/lib/utils'
-import { occasionLabel } from '@/lib/labels'
+import { occasionLabel, subcategoryLabel } from '@/lib/labels'
 import { downscale } from '@/lib/image-client'
 
 /**
@@ -212,7 +212,12 @@ export function EditItemForm({ item }: { item: WardrobeItem }) {
               />
             </Field>
             <Field label="Subcategoria">
-              <Select value={draft.subcategory} options={[...ALL_SUBCATEGORIES]} onChange={(v) => patch('subcategory', v)} />
+              <Select
+                value={draft.subcategory}
+                options={[...ALL_SUBCATEGORIES]}
+                label={subcategoryLabel}
+                onChange={(v) => patch('subcategory', v)}
+              />
             </Field>
             <Field label="Cor">
               <input
@@ -303,11 +308,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Select({
-  value, options, onChange,
+  value, options, onChange, label = titleCase,
 }: {
   value: string
   options: string[]
   onChange: (v: string) => void
+  label?: (v: string) => string
 }) {
   return (
     <select
@@ -316,7 +322,7 @@ function Select({
       className="w-full rounded-soft border border-sand bg-transparent px-3 py-2.5 text-sm focus:border-clay focus:outline-none"
     >
       {options.map((o) => (
-        <option key={o} value={o}>{titleCase(o)}</option>
+        <option key={o} value={o}>{label(o)}</option>
       ))}
     </select>
   )

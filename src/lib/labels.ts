@@ -47,6 +47,32 @@ export const ROLE_LABELS: Record<OutfitRole, string> = {
   bag: 'Bolsa',
 }
 
+/**
+ * Rótulo de subcategoria.
+ * O slug do banco é sem acento de propósito (é chave); o que a pessoa lê, não.
+ * Sem isto o nome sugerido da peça saía "Calca verde".
+ */
+export const SUBCATEGORY_LABELS: Record<string, string> = {
+  camiseta: 'Camiseta', camisa: 'Camisa', polo: 'Polo', regata: 'Regata',
+  blusa: 'Blusa', sueter: 'Suéter', 'top-esportivo': 'Top esportivo',
+  calca: 'Calça', shorts: 'Shorts', saia: 'Saia', legging: 'Legging',
+  skort: 'Skort', bermuda: 'Bermuda',
+  vestido: 'Vestido', macacao: 'Macacão',
+  jaqueta: 'Jaqueta', blazer: 'Blazer', casaco: 'Casaco', cardiga: 'Cardigã',
+  'corta-vento': 'Corta-vento',
+  tenis: 'Tênis', 'tenis-corrida': 'Tênis de corrida', 'tenis-tenis': 'Tênis de quadra',
+  sapatilha: 'Sapatilha', salto: 'Salto', sandalia: 'Sandália', bota: 'Bota',
+  sapato: 'Sapato', chinelo: 'Chinelo',
+  cinto: 'Cinto', relogio: 'Relógio', oculos: 'Óculos', bone: 'Boné',
+  viseira: 'Viseira', chapeu: 'Chapéu', joia: 'Joia', bijuteria: 'Bijuteria',
+  meia: 'Meia', faixa: 'Faixa',
+  bolsa: 'Bolsa', mochila: 'Mochila', necessaire: 'Necessaire', raqueteira: 'Raqueteira',
+}
+
+export function subcategoryLabel(value: string): string {
+  return SUBCATEGORY_LABELS[value] ?? titleCase(value)
+}
+
 export function occasionLabel(value: string): string {
   return OCCASION_LABELS[value] ?? titleCase(value)
 }
