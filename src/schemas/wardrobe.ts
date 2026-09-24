@@ -12,7 +12,7 @@ export const SUBCATEGORIES = {
   top: ['camiseta', 'camisa', 'polo', 'regata', 'blusa', 'sueter', 'top-esportivo'],
   bottom: ['calca', 'shorts', 'saia', 'legging', 'skort', 'bermuda'],
   dress: ['vestido', 'macacao'],
-  outerwear: ['jaqueta', 'blazer', 'casaco', 'cardiga', 'corta-vento'],
+  outerwear: ['jaqueta', 'blazer', 'colete', 'casaco', 'cardiga', 'corta-vento'],
   shoes: ['tenis', 'tenis-corrida', 'tenis-tenis', 'sapatilha', 'salto', 'sandalia', 'bota', 'sapato', 'chinelo'],
   accessory: [
     'cinto', 'relogio', 'oculos', 'bone', 'viseira', 'chapeu', 'meia', 'faixa',

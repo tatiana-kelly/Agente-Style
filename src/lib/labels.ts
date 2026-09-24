@@ -58,7 +58,7 @@ export const SUBCATEGORY_LABELS: Record<string, string> = {
   calca: 'Calça', shorts: 'Shorts', saia: 'Saia', legging: 'Legging',
   skort: 'Skort', bermuda: 'Bermuda',
   vestido: 'Vestido', macacao: 'Macacão',
-  jaqueta: 'Jaqueta', blazer: 'Blazer', casaco: 'Casaco', cardiga: 'Cardigã',
+  jaqueta: 'Jaqueta', blazer: 'Blazer', colete: 'Colete', casaco: 'Casaco', cardiga: 'Cardigã',
   'corta-vento': 'Corta-vento',
   tenis: 'Tênis', 'tenis-corrida': 'Tênis de corrida', 'tenis-tenis': 'Tênis de quadra',
   sapatilha: 'Sapatilha', salto: 'Salto', sandalia: 'Sandália', bota: 'Bota',

@@ -1,4 +1,5 @@
 import { outfitFormulaSchema, type OutfitFormula } from '@/schemas/formula'
+import { CAPSULE_FORMULAS } from './formulas-capsule'
 
 /**
  * Biblioteca de fórmulas de look.
@@ -488,10 +489,10 @@ const UNIVERSAL: OutfitFormula[] = [
     ['casual', 'dia-a-dia', 'social', 'trabalho', 'viagem', 'moderno', 'feminino', 'elegante', 'igreja', 'jantar', 'evento', 'festa', 'esporte', 'tenis'],
     ['dia-comum', 'passeio', 'trabalho', 'reuniao', 'almoco', 'jantar', 'evento', 'festa', 'viagem', 'igreja', 'treino', 'partida-tenis'],
     [0, 10],
-    [['top', ['tshirt', 'blouse', 'shirt', 'knit', 'polo', 'tank', 'sport_top', 'statement_top']],
-     ['bottom', ['tailored_trousers', 'wide_leg_trousers', 'jeans', 'midi_skirt', 'pleated_skirt', 'skirt', 'shorts', 'skort', 'leggings']],
+    [['top', ['tshirt', 'blouse', 'shirt', 'knit', 'polo', 'tank', 'sport_top', 'statement_top', 'vest']],
+     ['bottom', ['tailored_trousers', 'wide_leg_trousers', 'jeans', 'midi_skirt', 'pleated_skirt', 'skirt', 'long_skirt', 'shorts', 'skort', 'leggings']],
      ['shoes', ['heels', 'flats', 'elegant_shoe', 'loafers', 'sneakers', 'tennis_shoes', 'boots', 'sandals']]],
-    [['outerwear', ['blazer', 'cardigan', 'jacket', 'coat', 'windbreaker']], ['accessory', ACC_ELEGANT], ['bag', [...BAG_ELEGANT, 'backpack']]],
+    [['outerwear', ['blazer', 'vest', 'cardigan', 'jacket', 'denim_jacket', 'coat', 'windbreaker']], ['accessory', [...ACC_ELEGANT, 'scarf']], ['bag', [...BAG_ELEGANT, 'backpack']]],
     [], 'relaxed',
     'Estrutura mínima de um look completo. É a rede de segurança do Tier 5.',
     'styling-principle', 'estrutura base', 0.2),
@@ -500,16 +501,17 @@ const UNIVERSAL: OutfitFormula[] = [
     ['casual', 'social', 'elegante', 'feminino', 'igreja', 'jantar', 'evento', 'festa', 'moderno', 'dia-a-dia'],
     ['dia-comum', 'passeio', 'almoco', 'jantar', 'evento', 'festa', 'igreja', 'trabalho', 'reuniao'],
     [0, 10],
-    [['dress', ['dress', 'midi_dress', 'sport_dress']],
+    [['dress', ['dress', 'midi_dress', 'long_dress', 'jumpsuit', 'sport_dress']],
      ['shoes', ['heels', 'flats', 'elegant_shoe', 'loafers', 'sneakers', 'sandals', 'boots', 'tennis_shoes']]],
-    [['outerwear', ['blazer', 'cardigan', 'jacket', 'coat']], ['accessory', ACC_ELEGANT], ['bag', BAG_ELEGANT]],
+    [['outerwear', ['blazer', 'vest', 'cardigan', 'jacket', 'denim_jacket', 'coat']], ['accessory', [...ACC_ELEGANT, 'scarf']], ['bag', BAG_ELEGANT]],
     [], 'relaxed',
     'Vestido cobre cima e baixo de uma vez.',
     'styling-principle', 'estrutura base', 0.2),
 ]
 
 export const OUTFIT_FORMULAS: OutfitFormula[] = [
-  ...WORK, ...CHURCH, ...TENNIS, ...SPORT, ...CASUAL, ...DINNER, ...EVENT, ...TRAVEL, ...UNIVERSAL,
+  ...WORK, ...CHURCH, ...TENNIS, ...SPORT, ...CASUAL, ...DINNER, ...EVENT, ...TRAVEL,
+  ...CAPSULE_FORMULAS, ...UNIVERSAL,
 ]
 
 export const FORMULA_COUNT = OUTFIT_FORMULAS.length

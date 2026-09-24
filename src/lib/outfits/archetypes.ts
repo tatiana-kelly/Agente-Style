@@ -58,15 +58,15 @@ export function archetypesOf(item: WardrobeItem): GarmentArchetype[] {
       // saia esportiva como saia de quadra.
       out.push('skirt')
       if (sport) out.push('skort')
-      else out.push('midi_skirt', 'pleated_skirt')
+      else out.push('midi_skirt', 'pleated_skirt', 'long_skirt')
       break
 
     case 'vestido':
       out.push(sport ? 'sport_dress' : 'dress')
-      if (!sport) out.push('midi_dress')
+      if (!sport) out.push('midi_dress', 'long_dress')
       break
     case 'macacao':
-      out.push('dress')
+      out.push('jumpsuit', 'dress')
       break
 
     case 'blazer':
@@ -76,7 +76,10 @@ export function archetypesOf(item: WardrobeItem): GarmentArchetype[] {
       out.push('cardigan')
       break
     case 'jaqueta':
-      out.push('jacket')
+      out.push('jacket', 'denim_jacket')
+      break
+    case 'colete':
+      out.push('vest')
       break
     case 'corta-vento':
       out.push('windbreaker', 'jacket')
@@ -133,7 +136,7 @@ export function archetypesOf(item: WardrobeItem): GarmentArchetype[] {
       out.push('jewelry')
       break
     case 'lenco':
-      out.push('jewelry')
+      out.push('scarf', 'jewelry')
       break
     case 'cinto':
       out.push('belt')

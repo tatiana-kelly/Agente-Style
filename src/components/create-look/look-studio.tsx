@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Eye, Heart, Loader2, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
+import { Heart, Loader2, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
-import { ItemThumb } from '@/components/ui/item-thumb'
+import { LookCollage } from '@/components/ui/look-collage'
 import { NOVELTY_LEVELS, STYLES, type NoveltyLevel, type Style } from '@/schemas/outfit'
 import { OCCASIONS } from '@/schemas/wardrobe'
 import type { WardrobeItem } from '@/schemas/wardrobe'
@@ -300,28 +300,9 @@ export function LookStudio() {
                       // eslint-disable-next-line @next/next/no-img-element -- URL assinada
                       <img src={imagem} alt={`Opção ${i + 1}`} className="size-full object-cover" />
                     ) : (
-                      <div className="flex size-full flex-col items-center justify-center gap-3 px-5 text-center">
-                        <div className="flex flex-wrap justify-center gap-1.5">
-                          {p.items.map(({ item }) => (
-                            <span key={item.id} className="size-11 overflow-hidden rounded-soft" title={item.name}>
-                              <ItemThumb item={item} />
-                            </span>
-                          ))}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => verEmMim(p)}
-                          disabled={gerando !== null}
-                        >
-                          {gerando === p.outfitId ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Eye className="size-4" />
-                          )}
-                          {gerando === p.outfitId ? 'Criando…' : 'Ver em mim'}
-                        </Button>
-                      </div>
+                      // Vitrine imediata: a combinacao aparece pronta, sem esperar
+                      // imagem gerada. A foto no corpo sai ao salvar o look.
+                      <LookCollage items={p.items} />
                     )}
                     <span className="absolute left-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 text-[0.625rem] font-medium">
                       {i === 0 ? 'Principal' : `Opção ${i + 1}`}
@@ -344,8 +325,18 @@ export function LookStudio() {
                       <Button variant="secondary" size="sm" onClick={() => sendFeedback(p, 'liked')}>
                         <Heart className="size-3.5" /> Gostei
                       </Button>
-                      <Button variant="primary" size="sm" onClick={() => sendFeedback(p, 'saved')}>
-                        <Save className="size-3.5" /> Salvar
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => sendFeedback(p, 'saved')}
+                        disabled={gerando !== null}
+                      >
+                        {gerando === p.outfitId ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Save className="size-3.5" />
+                        )}
+                        {gerando === p.outfitId ? 'Salvando…' : 'Salvar'}
                       </Button>
                       <Button
                         variant="outline"

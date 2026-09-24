@@ -15,17 +15,23 @@ import { COLOR_RELATIONS } from '@/lib/outfits/color-engine'
 export const GARMENT_ARCHETYPES = [
   // tops
   'blouse', 'shirt', 'tshirt', 'knit', 'polo', 'tank', 'sport_top', 'statement_top',
+  // Colete de alfaiataria: usa-se como parte de cima OU como terceira peca —
+  // por isso entra nos dois grupos de slots, nao so em sobreposicao.
+  'vest',
   // bottoms
   'tailored_trousers', 'wide_leg_trousers', 'jeans', 'midi_skirt', 'pleated_skirt',
-  'skirt', 'shorts', 'skort', 'leggings',
+  'skirt', 'long_skirt', 'shorts', 'skort', 'leggings',
   // inteiriças
-  'dress', 'midi_dress', 'sport_dress',
+  'dress', 'midi_dress', 'long_dress', 'sport_dress', 'jumpsuit',
   // sobreposição
-  'blazer', 'cardigan', 'jacket', 'coat', 'windbreaker',
+  'blazer', 'cardigan', 'jacket', 'denim_jacket', 'coat', 'windbreaker',
   // calçados
   'heels', 'flats', 'elegant_shoe', 'loafers', 'sneakers', 'tennis_shoes', 'boots', 'sandals',
   // acessórios
   'visor', 'cap', 'watch', 'jewelry', 'belt', 'sunglasses',
+  // Lenco tem styling proprio (pescoco, cabelo, alca da bolsa) e nao se
+  // substitui por colar: virou arquetipo em vez de cair em 'jewelry'.
+  'scarf',
   // bolsas
   'structured_bag', 'tote', 'backpack', 'tennis_bag',
 ] as const
