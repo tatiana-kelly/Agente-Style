@@ -27,9 +27,9 @@ export function LookCollage({
 
   return (
     <div className="flex size-full flex-col gap-2 p-3">
-      <div
-        className={`grid flex-1 gap-2 ${destaque.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}
-      >
+      {/* Lado a lado a partir de duas pecas: empilhado, o cartao fica alto
+          demais e no celular o look vira rolagem. */}
+      <div className={`grid flex-1 gap-2 ${destaque.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {destaque.map(({ role, item }) => (
           <div
             key={item.id}
