@@ -94,7 +94,9 @@ function isUsable(item: WardrobeItem, ctx: EngineContext, tier: number): boolean
 
   // Equipamento de quadra só em contexto de quadra: raqueteira não é bolsa de
   // viagem e viseira de tênis não termina look de passeio.
-  const daQuadra = ['raqueteira', 'viseira'].includes(item.subcategory)
+  // Tênis de quadra e de corrida são equipamento: fora do esporte, o tênis
+  // casual faz o papel e o técnico destoa do look.
+  const daQuadra = ['raqueteira', 'viseira', 'tenis-tenis', 'tenis-corrida'].includes(item.subcategory)
   const contextoDeQuadra =
     ctx.style === 'tenis' || ctx.style === 'esporte' ||
     ctx.occasion === 'partida-tenis' || ctx.occasion === 'treino'
@@ -688,7 +690,9 @@ function diversify(ranked: OutfitCandidate[], count: number): OutfitCandidate[] 
     original: c,
   }))
 
-  return selecionarDiversos(limitarPorFormula(candidatos, 2), count)
+  // O teto por fórmula evita que uma ideia domine o topo; alto o bastante para
+  // ainda sobrar combinação sem nenhuma peça repetida quando ela existir.
+  return selecionarDiversos(limitarPorFormula(candidatos, 6), count)
 }
 
 function sameColor(a: string, b: string): boolean {

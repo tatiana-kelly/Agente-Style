@@ -122,3 +122,27 @@ describe('TESTE OBRIGATÓRIO — 3 looks, 3 ideias', () => {
     }
   })
 })
+
+describe('as três opções não dividem peças', () => {
+  const contextos = [
+    { style: 'trabalho', occasion: 'trabalho' },
+    { style: 'casual', occasion: 'passeio' },
+    { style: 'viagem', occasion: 'viagem' },
+  ] as const
+
+  for (const c of contextos) {
+    it(`${c.occasion}: nenhuma peça de roupa aparece em duas opções`, () => {
+      const r = generateCandidates(CENARIO_GUARDA_ROUPA, cenarioCtx({ ...c, clima: 'ameno' }), 3)
+      const vistas = new Map<string, number>()
+      const roupa = ['top', 'bottom', 'dress', 'outerwear', 'shoes']
+      for (const cand of r.candidates) {
+        for (const p of cand.items) {
+          if (!roupa.includes(p.role)) continue
+          vistas.set(p.item.id, (vistas.get(p.item.id) ?? 0) + 1)
+        }
+      }
+      const repetidas = [...vistas.entries()].filter(([, n]) => n > 1)
+      expect(repetidas).toEqual([])
+    })
+  }
+})

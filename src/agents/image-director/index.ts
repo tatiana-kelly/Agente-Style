@@ -44,9 +44,14 @@ function buildPrompt(input: ImageDirectorInput): string {
   const described = input.items.map(({ item, role }) => describeGarment(item, role)).join('\n')
   const hasPhoto = Boolean(input.personPhotoUrl)
 
+  // Sem foto da pessoa, o look é apresentado numa modelo editorial — é assim
+  // que ele aparece nas referências que a usuária escolheu como padrão. A
+  // descrição é genérica de propósito: não reproduz pessoa real nenhuma.
   const subject = hasPhoto
     ? 'Use a PRIMEIRA imagem de referência como a pessoa. Preserve exatamente rosto, tom de pele, cabelo, altura e proporções corporais.'
-    : 'Gere uma pessoa de corpo inteiro, em pose natural e neutra.'
+    : `Modelo de moda feminina, adulta, silhueta esguia e alongada, cabelo comprido,
+postura ereta e pose natural de editorial, andando ou parada de frente.
+Pessoa fictícia: não reproduza nenhuma pessoa real.`
 
   const corrections = input.correctionNotes?.length
     ? `\n\nCORREÇÕES OBRIGATÓRIAS DESTA TENTATIVA:\n${input.correctionNotes.map((c) => `- ${c}`).join('\n')}`
@@ -62,8 +67,9 @@ ${described}
 As imagens de referência seguintes são as peças reais do guarda-roupa. Reproduza cor, corte, comprimento e detalhes de cada uma com fidelidade.
 
 Contexto: ${input.intent.style.replace(/-/g, ' ')}, ocasião ${input.intent.occasion.replace(/-/g, ' ')}.
-Cenário: fundo neutro e limpo, luz natural suave, foco na roupa.
-Enquadramento: corpo inteiro, da cabeça aos pés, calçado totalmente visível.${corrections}`
+Cenário: fundo arquitetônico claro e limpo, luz natural suave, foco na roupa.
+Enquadramento: corpo inteiro, da cabeça aos pés, calçado totalmente visível.
+Acabamento: fotografia de catálogo de moda, nítida, cores fiéis às peças.${corrections}`
 }
 
 function describeGarment(item: WardrobeItem, role: OutfitRole): string {

@@ -3,11 +3,14 @@ import type { OutfitRole } from '@/schemas/outfit'
 import { generateCandidates, signature, type EngineContext, type OutfitCandidate } from '@/lib/outfits/engine'
 import { describeRelation } from '@/lib/outfits/color-engine'
 import { avaliarPaleta } from '@/lib/outfits/style-dna'
+import { sugerirCompra, type Sugestao } from '@/lib/outfits/wishlist'
 import { occasionLabel, roleLabel, styleLabel } from '@/lib/labels'
 
 export interface OutfitProposal {
   /** Como a opção se apresenta na tela: "Casual chic", "Mais elegante"… */
   etiqueta: string
+  /** "Esse look pede isso aqui" — peça que falta no guarda-roupa. */
+  sugestao: Sugestao | null
   items: Array<{ item: WardrobeItem; role: OutfitRole }>
   scores: Record<string, number>
   explanation: string
@@ -33,7 +36,15 @@ export interface OutfitAgentOutput {
  */
 export function runOutfitAgent(items: WardrobeItem[], ctx: EngineContext, count = 3): OutfitAgentOutput {
   const result = generateCandidates(items, ctx, count)
-  const proposals = etiquetar(result.candidates.map((c) => toProposal(c, ctx)))
+  // Sugestão repetida nas três opções vira ruído: cada uma pede coisa diferente.
+  const jaSugeridas = new Set<string>()
+  const proposals = etiquetar(
+    result.candidates.map((c) => {
+      const proposta = toProposal(c, ctx, items, jaSugeridas)
+      if (proposta.sugestao) jaSugeridas.add(proposta.sugestao.termoDeBusca)
+      return proposta
+    }),
+  )
 
   return {
     primary: proposals[0] ?? null,
@@ -69,12 +80,18 @@ function etiquetar(propostas: OutfitProposal[]): OutfitProposal[] {
   return propostas.map((p) => ({ ...p, etiqueta: etiquetas.get(p) ?? p.formulaName }))
 }
 
-function toProposal(candidate: OutfitCandidate, ctx: EngineContext): OutfitProposal {
+function toProposal(
+  candidate: OutfitCandidate,
+  ctx: EngineContext,
+  acervo: WardrobeItem[],
+  jaSugeridas: ReadonlySet<string> = new Set(),
+): OutfitProposal {
   const anchor = candidate.items.find((i) => i.role === 'dress' || i.role === 'top')?.item
   const base = anchor ? anchor.name : styleLabel(ctx.style)
 
   return {
     etiqueta: candidate.formula.name,
+    sugestao: sugerirCompra(candidate.items, acervo, candidate.formula, jaSugeridas),
     items: candidate.items.map((i) => ({ item: i.item, role: i.role })),
     scores: candidate.scores as unknown as Record<string, number>,
     explanation: explain(candidate),

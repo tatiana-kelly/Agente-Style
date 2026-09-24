@@ -20,6 +20,9 @@ export interface Peca {
   slotAffinity: number
 }
 
+/** O que conta como roupa para efeito de "não repetir peça entre as opções". */
+const ROUPA: readonly OutfitRole[] = ['top', 'bottom', 'dress', 'outerwear', 'shoes']
+
 const TERCEIRAS: Record<string, string> = {
   blazer: 'blazer', colete: 'colete', cardiga: 'casaquinho',
   jaqueta: 'jaqueta', casaco: 'casaco', 'corta-vento': 'corta-vento',
@@ -145,9 +148,16 @@ export function selecionarDiversos<T>(candidatos: Array<Candidato<T>>, quantidad
     familia?: boolean
     base: boolean
     cima: boolean
+    semPecaRepetida?: boolean
     alemDaBlusa?: boolean
     distancia: number
   }> = [
+    // "Nenhuma peça repetida" é a exigência que mais importa para ela, então
+    // ela sobrevive sozinha por várias passadas, enquanto as outras cedem.
+    { estrutura: true, base: true, cima: true, semPecaRepetida: true, distancia: 0.6 },
+    { estrutura: true, base: true, cima: false, semPecaRepetida: true, distancia: 0.6 },
+    { estrutura: true, base: false, cima: false, semPecaRepetida: true, distancia: 0.45 },
+    { estrutura: false, base: false, cima: false, semPecaRepetida: true, distancia: 0 },
     { estrutura: true, base: true, cima: true, distancia: 0.6 },
     { estrutura: true, base: true, cima: false, distancia: 0.6 },
     { estrutura: true, base: false, cima: false, distancia: 0.45 },
@@ -170,6 +180,14 @@ export function selecionarDiversos<T>(candidatos: Array<Candidato<T>>, quantidad
       if (regra.estrutura) {
         const estrutura = estruturaDoLook(candidato.look.familia)
         if (escolhidos.some((e) => estruturaDoLook(e.look.familia) === estrutura)) continue
+      }
+      if (regra.semPecaRepetida) {
+        // Roupa e calçado não se repetem; bolsa e acessório são acabamento e
+        // já rodam separado — exigir bolsa diferente deixaria a pessoa sem a
+        // terceira opção em guarda-roupa normal.
+        const roupa = (p: Peca) => ROUPA.includes(p.role)
+        const usadas = new Set(escolhidos.flatMap((e) => e.look.items.filter(roupa).map((p) => p.item.id)))
+        if (candidato.look.items.some((p) => roupa(p) && usadas.has(p.item.id))) continue
       }
       if (regra.familia && escolhidos.some((e) => e.look.familia === candidato.look.familia)) continue
       if (regra.base && escolhidos.some((e) => pecaDe(e.look, 'bottom') === pecaDe(candidato.look, 'bottom'))) {

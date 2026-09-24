@@ -3,16 +3,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Heart, Loader2, Plus, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
+import { Heart, Loader2, Plus, RefreshCw, Replace, Save, ShoppingBag, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { LookCollage } from '@/components/ui/look-collage'
 import type { WardrobeItem } from '@/schemas/wardrobe'
 import { roleLabel } from '@/lib/labels'
+
+interface Sugestao {
+  peca: string
+  motivo: string
+  termoDeBusca: string
+}
 
 interface Proposal {
   outfitId: string
   name: string
   etiqueta?: string
+  sugestao?: Sugestao | null
   explanation: string
   items: Array<{ role: string; item: WardrobeItem }>
 }
@@ -400,21 +406,18 @@ export function LookStudio() {
                       // eslint-disable-next-line @next/next/no-img-element -- URL assinada
                       <img src={imagem} alt={`Opção ${i + 1}`} className="size-full object-cover" />
                     ) : (
-                      // Enquanto a foto no corpo nao chega, as pecas ja aparecem
-                      // compostas — a tela nunca fica vazia esperando.
-                      <>
-                        <LookCollage items={p.items} />
-                        {vestindo.has(p.outfitId) && (
-                          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-bone/85 py-2 text-xs text-cocoa backdrop-blur-sm">
-                            <Loader2 className="size-3.5 animate-spin" /> Vestindo o look…
-                          </span>
+                      // Peça solta antes da foto atrapalha mais do que ajuda: a
+                      // pessoa quer ver o look vestido, não um mosaico de recortes.
+                      <div className="shimmer flex size-full flex-col items-center justify-center gap-2 text-xs text-mist">
+                        {falhas[p.outfitId] && !vestindo.has(p.outfitId) ? (
+                          <span className="px-4 text-center leading-snug text-cocoa">{falhas[p.outfitId]}</span>
+                        ) : (
+                          <>
+                            <Loader2 className="size-4 animate-spin" />
+                            Vestindo o look…
+                          </>
                         )}
-                        {falhas[p.outfitId] && !vestindo.has(p.outfitId) && (
-                          <span className="absolute inset-x-0 bottom-0 bg-bone/90 px-3 py-2 text-[0.6875rem] leading-snug text-cocoa">
-                            {falhas[p.outfitId]}
-                          </span>
-                        )}
-                      </>
+                      </div>
                     )}
                     <span className="absolute left-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 text-[0.625rem] font-medium">
                       {p.etiqueta ?? (i === 0 ? 'Principal' : `Opção ${i + 1}`)}
@@ -432,6 +435,24 @@ export function LookStudio() {
                     </ul>
 
                     <p className="mt-3 flex-1 text-xs leading-relaxed text-cocoa">{p.explanation}</p>
+
+                    {p.sugestao && (
+                      <div className="mt-3 rounded-soft border border-dashed border-sand bg-ivory/60 px-3 py-2.5">
+                        <span className="eyebrow flex items-center gap-1.5">
+                          <ShoppingBag className="size-3" /> Esse look pede
+                        </span>
+                        <p className="mt-1 text-xs leading-relaxed text-espresso">{p.sugestao.peca}</p>
+                        <p className="mt-0.5 text-[0.6875rem] leading-relaxed text-mist">{p.sugestao.motivo}</p>
+                        <a
+                          href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(p.sugestao.termoDeBusca)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1.5 inline-block text-[0.6875rem] underline underline-offset-2 hover:text-espresso"
+                        >
+                          Ver opções
+                        </a>
+                      </div>
+                    )}
 
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <Button variant="secondary" size="sm" onClick={() => sendFeedback(p, 'liked')}>
