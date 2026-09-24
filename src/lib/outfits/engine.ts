@@ -3,6 +3,7 @@ import type { NoveltyLevel, OutfitRole, Style } from '@/schemas/outfit'
 import type { OutfitFormula, FormulaSlot } from '@/schemas/formula'
 import { OUTFIT_FORMULAS } from '@/data/outfit-formulas'
 import { matchesSlot, slotAffinity } from './archetypes'
+import { avaliarCoerencia, nucleoDoLook, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
 import { analyzePalette, colorCompatibility, type PaletteAnalysis } from './color-engine'
 import { ruleFor } from '@/lib/wardrobe/style-rules'
 
@@ -122,7 +123,15 @@ function candidatesForSlot(
     picks.push({ item, affinity: affinity || 0.25 })
   }
 
-  return picks.sort((a, b) => b.affinity - a.affinity).slice(0, 5)
+  // Empate de afinidade era sempre resolvido pela mesma peça: a repetida cai
+  // na ordenação para o guarda-roupa inteiro circular.
+  return picks
+    .sort(
+      (a, b) =>
+        b.affinity - penalidadeRepeticao(b.item, ctx.recentItemIds) -
+        (a.affinity - penalidadeRepeticao(a.item, ctx.recentItemIds)),
+    )
+    .slice(0, 5)
 }
 
 // ─────────────────────────────────────────────────────────────── construção
@@ -186,7 +195,13 @@ function buildFromFormula(
   )
   if (complete.length === 0) return []
 
-  return complete.map((p) => {
+  // Look montado ainda não é look bom: aqui entram as regras de composição.
+  // Reprovar tudo neste tier é de propósito — o tier seguinte afrouxa, e vale
+  // mais tentar de novo do que entregar blusa social com tênis.
+  const coerentes = complete.filter((p) => avaliarCoerencia(p.picks, { tier, formula }).length === 0)
+  if (coerentes.length === 0) return []
+
+  return coerentes.map((p) => {
     let withExtras = addOptional(p.picks, items, formula, ctx, tier, p.used)
     withExtras = garantirTravadas(withExtras, locked)
     const palette = analyzePalette(
@@ -205,7 +220,7 @@ function buildFromFormula(
 
 /** Quantas peças cada papel opcional pode contribuir. */
 const MAX_POR_PAPEL: Partial<Record<OutfitRole, number>> = {
-  accessory: 3,
+  accessory: MAX_ACESSORIOS,
   bag: 1,
   outerwear: 1,
 }
@@ -252,7 +267,8 @@ function addOptional(
     const ordenados = candidatesForSlot(items, slot, ctx, tier, taken)
       .map((p) => {
         const harmony = Math.min(...result.map((r) => colorCompatibility(r.item.color, p.item.color)))
-        return { ...p, value: p.affinity * 0.45 + (harmony / 3) * 0.55 }
+        const value = p.affinity * 0.45 + (harmony / 3) * 0.55 - penalidadeRepeticao(p.item, ctx.recentItemIds)
+        return { ...p, value }
       })
       .sort((a, b) => b.value - a.value)
 
@@ -367,11 +383,11 @@ function score(
     formula_match * 0.22 +
       color_match * 0.18 +
       style_match * 0.14 +
-      occasion_match * 0.12 +
-      formality_match * 0.14 +
-      wardrobe_match * 0.1 +
+      occasion_match * 0.11 +
+      formality_match * 0.15 +
+      wardrobe_match * 0.09 +
       user_preference_match * 0.06 +
-      novelty * 0.04,
+      novelty * 0.05,
   )
 
   return {
@@ -444,7 +460,8 @@ export function generateCandidates(
 
     if (ranked.length > 0) {
       const missing = ranked[0].unmetRoles
-      return { candidates: diversify(ranked, count), tierUsed: step.tier, missingRoles: missing, formulasTried }
+      const escolhidos = variarAcabamento(diversify(ranked, count), pool, ctx, step.tier)
+      return { candidates: escolhidos, tierUsed: step.tier, missingRoles: missing, formulasTried }
     }
   }
 
@@ -504,23 +521,100 @@ function dedupe(list: OutfitCandidate[]): OutfitCandidate[] {
  * Alternativas precisam ser de fato diferentes: penaliza reaproveitar a mesma
  * peça-âncora, senão as três opções viram a mesma blusa com sapato trocado.
  */
+/**
+ * Troca o acabamento repetido entre as opções.
+ *
+ * As três saíam com o mesmo colar, o mesmo brinco e a mesma bolsa porque cada
+ * uma é montada sem saber das outras. O acabamento é justamente o que faz a
+ * mesma base parecer outro look — repeti-lo joga fora essa chance.
+ */
+function variarAcabamento(
+  escolhidos: OutfitCandidate[],
+  items: WardrobeItem[],
+  ctx: EngineContext,
+  tier: number,
+): OutfitCandidate[] {
+  const jaUsados = new Set<string>()
+  const ehAcabamento = (role: OutfitRole) => role === 'accessory' || role === 'bag'
+
+  return escolhidos.map((candidato, indice) => {
+    if (indice === 0) {
+      for (const p of candidato.items) if (ehAcabamento(p.role)) jaUsados.add(p.item.id)
+      return candidato
+    }
+
+    const noLook = new Set(candidato.items.map((p) => p.item.id))
+    const trocados = candidato.items.map((p) => {
+      if (!ehAcabamento(p.role) || !jaUsados.has(p.item.id)) return p
+
+      const alternativa = items
+        .filter(
+          (i) =>
+            (i.category as OutfitRole) === p.role &&
+            !noLook.has(i.id) &&
+            !jaUsados.has(i.id) &&
+            familiaDoAcessorio(i.subcategory) === familiaDoAcessorio(p.item.subcategory) &&
+            isUsable(i, ctx, tier),
+        )
+        .map((i) => ({
+          item: i,
+          harmonia: Math.min(
+            ...candidato.items
+              .filter((x) => !ehAcabamento(x.role))
+              .map((x) => colorCompatibility(x.item.color, i.color)),
+          ),
+        }))
+        .sort((a, b) => b.harmonia - a.harmonia)[0]
+
+      // Sem alternativa à altura, repetir é melhor que tirar o acessório.
+      if (!alternativa || alternativa.harmonia < 2) return p
+      noLook.add(alternativa.item.id)
+      return { ...p, item: alternativa.item }
+    })
+
+    for (const p of trocados) if (ehAcabamento(p.role)) jaUsados.add(p.item.id)
+    return { ...candidato, items: trocados }
+  })
+}
+
 function diversify(ranked: OutfitCandidate[], count: number): OutfitCandidate[] {
   const chosen: OutfitCandidate[] = []
-  const usedAnchors = new Set<string>()
 
-  for (const candidate of ranked) {
-    if (chosen.length >= count) break
-    const anchor = candidate.items.find((i) => i.role === 'dress' || i.role === 'top')?.item.id
-    if (anchor && usedAnchors.has(anchor) && chosen.length > 0) continue
-    chosen.push(candidate)
-    if (anchor) usedAnchors.add(anchor)
+  // Três opções que trocam só a blusa são uma opção só. Cada opção nova
+  // precisa mudar pelo menos DUAS peças de estrutura em relação a cada uma
+  // já escolhida — é isso que faz a pessoa ter de fato o que escolher.
+  const nucleoDe = (c: OutfitCandidate) =>
+    new Set(nucleoDoLook(c.items).map((p) => p.item.id))
+
+  const distancia = (a: OutfitCandidate, b: OutfitCandidate): number => {
+    const na = nucleoDe(a)
+    const nb = nucleoDe(b)
+    let iguais = 0
+    for (const id of na) if (nb.has(id)) iguais++
+    return Math.max(na.size, nb.size) - iguais
   }
 
-  // Se a diversificação foi rigorosa demais, completa com os melhores restantes.
-  for (const candidate of ranked) {
+  // Três passadas, cada uma menos exigente: variedade de verdade primeiro,
+  // e só se o guarda-roupa não permitir é que as opções se parecem.
+  for (const minimo of [2, 1, 0]) {
+    for (const candidate of ranked) {
+      if (chosen.length >= count) break
+      if (chosen.includes(candidate)) continue
+      // Fórmula repetida só entra quando a estrutura muda bastante.
+      const formulaRepetida = chosen.some((c) => c.formula.id === candidate.formula.id)
+      const exigido = formulaRepetida && minimo > 0 ? minimo + 1 : minimo
+      // A peça de cima é a que a pessoa enxerga primeiro: repetir a mesma
+      // camisa nas três opções faz o app parecer sem ideia.
+      const ancora = candidate.items.find((i) => i.role === 'dress' || i.role === 'top')?.item.id
+      const ancoraRepetida = Boolean(
+        ancora && chosen.some((c) => c.items.some((i) => (i.role === 'dress' || i.role === 'top') && i.item.id === ancora)),
+      )
+      if (ancoraRepetida && minimo > 0) continue
+      if (chosen.every((c) => distancia(c, candidate) >= exigido)) chosen.push(candidate)
+    }
     if (chosen.length >= count) break
-    if (!chosen.includes(candidate)) chosen.push(candidate)
   }
+
   return chosen
 }
 
