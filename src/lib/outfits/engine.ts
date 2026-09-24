@@ -3,9 +3,10 @@ import type { NoveltyLevel, OutfitRole, Style } from '@/schemas/outfit'
 import type { OutfitFormula, FormulaSlot } from '@/schemas/formula'
 import { OUTFIT_FORMULAS } from '@/data/outfit-formulas'
 import { matchesSlot, slotAffinity } from './archetypes'
-import { avaliarCoerencia, nucleoDoLook, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
+import { avaliarCoerencia, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
 import { normalizeColor } from '@/lib/wardrobe/colors'
 import { afinidadeComReferencias, avaliarPaleta } from './style-dna'
+import { comparavel, limitarPorFormula, selecionarDiversos } from './diversity'
 import { analyzePalette, colorCompatibility, colorRelation, type PaletteAnalysis } from './color-engine'
 import { ruleFor } from '@/lib/wardrobe/style-rules'
 
@@ -538,7 +539,9 @@ export function generateCandidates(
     for (const formula of usable) {
       formulasTried++
       found.push(...buildFromFormula(pool, formula, ctx, step.tier, rolesPresent))
-      if (found.length > 120) break
+      // Teto alto de propósito: com poucos candidatos, os três melhores são
+      // quase sempre a mesma ideia de look em três cores.
+      if (found.length > 400) break
     }
 
     const ranked = dedupe(found)
@@ -550,6 +553,7 @@ export function generateCandidates(
       const escolhidos = variarAcabamento(diversify(ranked, count), pool, ctx, step.tier)
       return { candidates: escolhidos, tierUsed: step.tier, missingRoles: missing, formulasTried }
     }
+
   }
 
   // Zero candidatos: diagnosticar o que falta, em vez de devolver "não foi possível".
@@ -669,45 +673,22 @@ function variarAcabamento(
   })
 }
 
+/**
+ * Escolhe as opções por IDEIA de look, não por nota.
+ *
+ * O ranking sozinho devolvia três variações da melhor fórmula — mesmo blazer,
+ * mesma calça, mesmo sapato, outra blusa. Aqui cada opção precisa vir de uma
+ * família diferente (terceira peça + tipo de base + calçado) enquanto o
+ * guarda-roupa permitir.
+ */
 function diversify(ranked: OutfitCandidate[], count: number): OutfitCandidate[] {
-  const chosen: OutfitCandidate[] = []
+  const candidatos = ranked.map((c) => ({
+    look: comparavel(c.items, c.formula.id),
+    qualidade: c.scores.total,
+    original: c,
+  }))
 
-  // Três opções que trocam só a blusa são uma opção só. Cada opção nova
-  // precisa mudar pelo menos DUAS peças de estrutura em relação a cada uma
-  // já escolhida — é isso que faz a pessoa ter de fato o que escolher.
-  const nucleoDe = (c: OutfitCandidate) =>
-    new Set(nucleoDoLook(c.items).map((p) => p.item.id))
-
-  const distancia = (a: OutfitCandidate, b: OutfitCandidate): number => {
-    const na = nucleoDe(a)
-    const nb = nucleoDe(b)
-    let iguais = 0
-    for (const id of na) if (nb.has(id)) iguais++
-    return Math.max(na.size, nb.size) - iguais
-  }
-
-  // Três passadas, cada uma menos exigente: variedade de verdade primeiro,
-  // e só se o guarda-roupa não permitir é que as opções se parecem.
-  for (const minimo of [2, 1, 0]) {
-    for (const candidate of ranked) {
-      if (chosen.length >= count) break
-      if (chosen.includes(candidate)) continue
-      // Fórmula repetida só entra quando a estrutura muda bastante.
-      const formulaRepetida = chosen.some((c) => c.formula.id === candidate.formula.id)
-      const exigido = formulaRepetida && minimo > 0 ? minimo + 1 : minimo
-      // A peça de cima é a que a pessoa enxerga primeiro: repetir a mesma
-      // camisa nas três opções faz o app parecer sem ideia.
-      const ancora = candidate.items.find((i) => i.role === 'dress' || i.role === 'top')?.item.id
-      const ancoraRepetida = Boolean(
-        ancora && chosen.some((c) => c.items.some((i) => (i.role === 'dress' || i.role === 'top') && i.item.id === ancora)),
-      )
-      if (ancoraRepetida && minimo > 0) continue
-      if (chosen.every((c) => distancia(c, candidate) >= exigido)) chosen.push(candidate)
-    }
-    if (chosen.length >= count) break
-  }
-
-  return chosen
+  return selecionarDiversos(limitarPorFormula(candidatos, 2), count)
 }
 
 function sameColor(a: string, b: string): boolean {
