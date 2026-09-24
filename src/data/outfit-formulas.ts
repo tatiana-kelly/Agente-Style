@@ -1,5 +1,6 @@
 import { outfitFormulaSchema, type OutfitFormula } from '@/schemas/formula'
 import { CAPSULE_FORMULAS } from './formulas-capsule'
+import { REFERENCE_FORMULAS } from './formulas-reference'
 
 /**
  * Biblioteca de fórmulas de look.
@@ -510,6 +511,9 @@ const UNIVERSAL: OutfitFormula[] = [
 ]
 
 export const OUTFIT_FORMULAS: OutfitFormula[] = [
+  // As referências da usuária vêm primeiro: em empate, o motor reproduz o que
+  // ela já disse que acha bonito, em vez de uma combinação só possível.
+  ...REFERENCE_FORMULAS,
   ...WORK, ...CHURCH, ...TENNIS, ...SPORT, ...CASUAL, ...DINNER, ...EVENT, ...TRAVEL,
   ...CAPSULE_FORMULAS, ...UNIVERSAL,
 ]

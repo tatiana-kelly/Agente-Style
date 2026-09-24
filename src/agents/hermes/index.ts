@@ -12,6 +12,9 @@ import { getImageProvider } from '@/lib/ai/image-provider'
 import { BudgetExceededError, CostBudget, estimateImageCost } from '@/lib/ai/cost'
 import { env } from '@/lib/env'
 import { BUCKETS } from '@/services/image-service'
+import { colorCompatibility } from '@/lib/outfits/color-engine'
+import type { WardrobeItem } from '@/schemas/wardrobe'
+import type { OutfitRole } from '@/schemas/outfit'
 
 export interface HermesDeps {
   repo: Repository
@@ -59,6 +62,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       weather: request.weather,
       profile: styleProfile,
       novelty: request.novelty,
+      clima: request.clima,
     })
 
     // 3. Wardrobe Agent — diagnostico do acervo disponivel
@@ -128,6 +132,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       style: intent.style,
       occasion: intent.occasion,
       season: intent.season,
+      clima: intent.clima,
       formalityOverride: intent.formalityOverride,
       favoriteColors: profile?.favorite_colors ?? [],
       avoidColors: profile?.avoid_colors ?? [],
@@ -303,7 +308,7 @@ export async function renderLookImage(args: {
 
   const image = await renderWithRetries({
     request: { userId, style: outfit.style, intent: 'render_only' } as HermesRequest,
-    outfit: { items: picks, scores: {}, explanation: outfit.explanation, name: outfit.name, formulaId: '', formulaName: '', tier: 1, signature: '' },
+    outfit: { etiqueta: '', items: picks, scores: {}, explanation: outfit.explanation, name: outfit.name, formulaId: '', formulaName: '', tier: 1, signature: '' },
     intent,
     photoUrl: photo?.image_url ?? null,
     budget,
@@ -468,4 +473,65 @@ async function log(
     tokens: 0,
     estimated_cost: cost,
   })
+}
+
+/**
+ * Acrescenta a melhor terceira peça a um look existente.
+ *
+ * Não refaz o look: procura, entre as sobreposições do guarda-roupa, a que
+ * conversa com a paleta e a formalidade do que já está montado. O look original
+ * continua salvo; este vira uma versão com casaco.
+ */
+export async function adicionarTerceiraPeca(args: {
+  repo: Repository
+  userId: string
+  outfitId: string
+}): Promise<{ success: boolean; item?: WardrobeItem; outfitId?: string; error?: string }> {
+  const { repo, userId, outfitId } = args
+
+  const [outfit, items] = await Promise.all([repo.getOutfit(userId, outfitId), repo.listItems(userId)])
+  if (!outfit) return { success: false, error: 'Look não encontrado.' }
+
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const atuais = outfit.items
+    .map((oi) => ({ item: byId.get(oi.wardrobe_item_id), role: oi.role }))
+    .filter((x): x is { item: WardrobeItem; role: OutfitRole } => Boolean(x.item))
+
+  if (atuais.some((p) => p.role === 'outerwear')) {
+    return { success: false, error: 'Este look já tem uma terceira peça.' }
+  }
+
+  const visiveis = atuais.filter((p) => p.role !== 'accessory' && p.role !== 'bag')
+  const formalidadeMedia =
+    visiveis.reduce((s, p) => s + p.item.formality, 0) / Math.max(visiveis.length, 1)
+
+  const candidatas = items
+    .filter((i) => i.category === 'outerwear' && i.active !== false)
+    .map((i) => ({
+      item: i,
+      harmonia: Math.min(...visiveis.map((p) => colorCompatibility(p.item.color, i.color))),
+      distancia: Math.abs(i.formality - formalidadeMedia),
+    }))
+    .filter((c) => c.harmonia >= 2 && c.distancia <= 3)
+    .sort((a, b) => b.harmonia - a.harmonia || a.distancia - b.distancia)
+
+  const escolhida = candidatas[0]
+  if (!escolhida) {
+    return { success: false, error: 'Não achei no seu guarda-roupa uma terceira peça que combine com este look.' }
+  }
+
+  const novo = await repo.saveOutfit({
+    userId,
+    name: outfit.name,
+    style: outfit.style,
+    occasion: outfit.occasion ?? undefined,
+    explanation: `${outfit.explanation} Acrescentei ${escolhida.item.name.toLowerCase()} por cima, mantendo o resto do look.`,
+    scores: outfit.scores ?? {},
+    items: [
+      ...outfit.items.map((i) => ({ wardrobe_item_id: i.wardrobe_item_id, role: i.role })),
+      { wardrobe_item_id: escolhida.item.id, role: 'outerwear' as OutfitRole },
+    ],
+  })
+
+  return { success: true, item: escolhida.item, outfitId: novo.id }
 }

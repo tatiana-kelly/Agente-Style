@@ -3,18 +3,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Heart, Loader2, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
+import { Heart, Loader2, Plus, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Chip } from '@/components/ui/chip'
 import { LookCollage } from '@/components/ui/look-collage'
-import { NOVELTY_LEVELS, STYLES, type NoveltyLevel, type Style } from '@/schemas/outfit'
-import { OCCASIONS } from '@/schemas/wardrobe'
 import type { WardrobeItem } from '@/schemas/wardrobe'
-import { occasionLabel, roleLabel, styleLabel } from '@/lib/labels'
+import { roleLabel } from '@/lib/labels'
 
 interface Proposal {
   outfitId: string
   name: string
+  etiqueta?: string
   explanation: string
   items: Array<{ role: string; item: WardrobeItem }>
 }
@@ -31,6 +29,30 @@ interface LookResponse {
   error?: string
 }
 
+/**
+ * A tela pergunta ONDE ela vai, não que estilo ela quer: decidir o nível de
+ * elegância é trabalho do sistema, não da pessoa que está se arrumando.
+ */
+const COMPROMISSOS = [
+  { id: 'trabalho', rotulo: 'Trabalho', occasion: 'trabalho', estilo: 'trabalho' },
+  { id: 'igreja', rotulo: 'Igreja', occasion: 'igreja', estilo: 'igreja' },
+  { id: 'dia-a-dia', rotulo: 'Dia a dia', occasion: 'dia-comum', estilo: 'dia-a-dia' },
+  { id: 'jantar', rotulo: 'Almoço/Jantar', occasion: 'jantar', estilo: 'jantar' },
+  { id: 'passeio', rotulo: 'Passeio', occasion: 'passeio', estilo: 'casual' },
+  { id: 'viagem', rotulo: 'Viagem', occasion: 'viagem', estilo: 'viagem' },
+  { id: 'tenis', rotulo: 'Tênis/Esporte', occasion: 'partida-tenis', estilo: 'tenis' },
+  { id: 'outro', rotulo: 'Outro', occasion: undefined, estilo: 'casual' },
+] as const
+
+type ClimaUI = 'calor' | 'ameno' | 'frio' | 'auto'
+
+const CLIMAS_UI: Array<{ id: ClimaUI; rotulo: string }> = [
+  { id: 'calor', rotulo: '☀️ Calor' },
+  { id: 'ameno', rotulo: '🌤️ Ameno' },
+  { id: 'frio', rotulo: '🧥 Frio' },
+  { id: 'auto', rotulo: '📍 Automático' },
+]
+
 /** Mensagens de progresso do PRP §45 — a tela nunca fica parada sem explicação. */
 const PROGRESS = [
   'Analisando seu guarda-roupa…',
@@ -41,18 +63,22 @@ const PROGRESS = [
 
 export function LookStudio() {
   const params = useSearchParams()
-  const initialStyle = (params.get('style') as Style | null) ?? null
+  // A Home ainda manda ?style=...; aqui isso só pré-seleciona o compromisso.
+  const initialStyle = params.get('style')
 
-  const [style, setStyle] = useState<Style | null>(initialStyle)
-  const [occasion, setOccasion] = useState<string | null>(null)
+  const [compromisso, setCompromisso] = useState<string>(
+    COMPROMISSOS.find((c) => c.estilo === initialStyle)?.id ?? 'dia-a-dia',
+  )
+  const [clima, setClima] = useState<ClimaUI>('auto')
+  const escolhido = COMPROMISSOS.find((c) => c.id === compromisso)
   const [context, setContext] = useState('')
-  const [novelty, setNovelty] = useState<NoveltyLevel>('equilibrado')
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<LookResponse | null>(null)
   const [imagens, setImagens] = useState<Record<string, string>>({})
   const [gerando, setGerando] = useState<string | null>(null)
   const [vestindo, setVestindo] = useState<Set<string>>(new Set())
+  const [vestindoCasaco, setVestindoCasaco] = useState<string | null>(null)
   const [semFoto, setSemFoto] = useState(false)
   const [falhas, setFalhas] = useState<Record<string, string>>({})
   const [ajuste, setAjuste] = useState<Record<string, string>>({})
@@ -83,7 +109,6 @@ export function LookStudio() {
   async function generate(
     options: { excludeIds?: string[]; lockedIds?: string[]; instruction?: string; baseOutfitId?: string } = {},
   ) {
-    if (!style) return
     setProgress(0)
     setLoading(true)
     setError(null)
@@ -95,11 +120,10 @@ export function LookStudio() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          style,
-          occasion: occasion ?? undefined,
+          occasion: escolhido?.occasion,
+          clima,
           context: context.trim() || undefined,
           render_image: false,
-          novelty,
           exclude_item_ids: options.excludeIds ?? [],
           locked_item_ids: options.lockedIds ?? [],
           instruction: options.instruction,
@@ -197,6 +221,50 @@ export function LookStudio() {
     }
   }
 
+  /**
+   * Esfriou: acrescenta a melhor terceira peça a ESTE look.
+   * Não sorteia tudo de novo — o resto do look continua igual.
+   */
+  async function adicionarCasaco(p: Proposal) {
+    setVestindoCasaco(p.outfitId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/outfits/${p.outfitId}/layer`, { method: 'POST' })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error ?? 'Não consegui acrescentar uma terceira peça.')
+
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              proposals: prev.proposals?.map((x) =>
+                x.outfitId === p.outfitId
+                  ? { ...x, items: [...x.items, { role: 'outerwear', item: payload.item }] }
+                  : x,
+              ),
+            }
+          : prev,
+      )
+      // A foto no corpo era de um look sem casaco: refaz só a desta opção.
+      setImagens((prev) => {
+        const resto = { ...prev }
+        delete resto[p.outfitId]
+        return resto
+      })
+      setVestindo((prev) => new Set(prev).add(p.outfitId))
+      await vestir(p.outfitId, 'previa')
+      setVestindo((prev) => {
+        const resto = new Set(prev)
+        resto.delete(p.outfitId)
+        return resto
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao acrescentar a terceira peça.')
+    } finally {
+      setVestindoCasaco(null)
+    }
+  }
+
   /** Dispara as três de uma vez; cada cartão troca assim que a sua fica pronta. */
   async function vestirTodas(propostas: Proposal[]) {
     setVestindo(new Set(propostas.map((p) => p.outfitId)))
@@ -214,85 +282,70 @@ export function LookStudio() {
 
   return (
     <div className="rise pb-8">
-      <p className="eyebrow">Criar look</p>
-      <h1 className="display mt-2 text-3xl md:text-4xl">Para onde você vai?</h1>
+      <p className="eyebrow">Montar look</p>
+      <h1 className="display mt-2 text-3xl md:text-4xl">O que você vai fazer?</h1>
+      <p className="mt-2 max-w-md text-sm leading-relaxed text-cocoa">
+        Escolha o compromisso e o clima. O nível de elegância é comigo.
+      </p>
 
       <section className="mt-5">
-        <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-          {OCCASIONS.map((o) => (
-            <Chip key={o} active={occasion === o} onClick={() => setOccasion(occasion === o ? null : o)}>
-              {occasionLabel(o)}
-            </Chip>
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <h2 className="display text-2xl">Qual estilo?</h2>
-        <div className="mt-4 grid grid-cols-3 gap-2 md:grid-cols-5">
-          {STYLES.map((s) => (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {COMPROMISSOS.map((c) => (
             <button
-              key={s}
+              key={c.id}
               type="button"
-              aria-pressed={style === s}
-              onClick={() => setStyle(s)}
+              aria-pressed={compromisso === c.id}
+              onClick={() => setCompromisso(c.id)}
               className={`rounded-soft border px-3 py-3 text-sm transition-colors ${
-                style === s ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
+                compromisso === c.id ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
               }`}
             >
-              {styleLabel(s)}
+              {c.rotulo}
             </button>
           ))}
         </div>
       </section>
 
       <section className="mt-8">
-        <h2 className="display text-2xl">Alguma preferência?</h2>
+        <h2 className="display text-2xl">Como está o tempo?</h2>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {CLIMAS_UI.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={clima === c.id}
+              onClick={() => setClima(c.id)}
+              className={`rounded-soft border px-3 py-3 text-sm transition-colors ${
+                clima === c.id ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
+              }`}
+            >
+              {c.rotulo}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="display text-2xl">Quer pedir alguma coisa?</h2>
         <textarea
           value={context}
           onChange={(e) => setContext(e.target.value)}
           rows={2}
           maxLength={200}
-          placeholder="Quero usar minha saia preta. É de manhã e vai fazer calor."
+          placeholder="Quero usar minha calça preta. É de manhã."
           className="mt-3 w-full resize-none rounded-soft border border-sand bg-transparent px-4 py-3 text-sm placeholder:text-mist focus:border-clay focus:outline-none"
         />
       </section>
 
-      <section className="mt-8">
-        <h2 className="display text-2xl">Quanto quero ousar?</h2>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {NOVELTY_LEVELS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              aria-pressed={novelty === n}
-              onClick={() => setNovelty(n)}
-              className={`rounded-soft border px-3 py-3 text-sm capitalize transition-colors ${
-                novelty === n ? 'border-espresso bg-espresso text-bone' : 'border-sand text-cocoa hover:border-clay'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-mist">
-          {novelty === 'classico' && 'Combinações consagradas, sem surpresa.'}
-          {novelty === 'equilibrado' && 'Seguro, com espaço para uma escolha menos óbvia.'}
-          {novelty === 'ousado' && 'Combinações menos previsíveis, usando o que você tem.'}
-        </p>
-      </section>
-
       <Button
         onClick={() => generate()}
-        disabled={!style || loading}
+        disabled={loading}
         size="lg"
         className="mt-6 w-full md:w-auto"
       >
         {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
         {loading ? PROGRESS[progress] : 'Montar meu look'}
       </Button>
-
-      {!style && <p className="mt-2 text-xs text-mist">Escolha um estilo para continuar.</p>}
 
       {error && (
         <p role="alert" className="mt-5 rounded-soft bg-rose/10 px-4 py-3 text-sm text-rose">
@@ -364,7 +417,7 @@ export function LookStudio() {
                       </>
                     )}
                     <span className="absolute left-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 text-[0.625rem] font-medium">
-                      {i === 0 ? 'Principal' : `Opção ${i + 1}`}
+                      {p.etiqueta ?? (i === 0 ? 'Principal' : `Opção ${i + 1}`)}
                     </span>
                   </figure>
 
@@ -407,6 +460,21 @@ export function LookStudio() {
                       <Button variant="ghost" size="sm" onClick={() => generate({ excludeIds: p.items.map((x) => x.item.id) })}>
                         <RefreshCw className="size-3.5" /> Outra
                       </Button>
+                      {!p.items.some((x) => x.role === 'outerwear') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => adicionarCasaco(p)}
+                          disabled={vestindoCasaco !== null}
+                        >
+                          {vestindoCasaco === p.outfitId ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="size-3.5" />
+                          )}
+                          Casaco
+                        </Button>
+                      )}
                     </div>
 
                     {/*

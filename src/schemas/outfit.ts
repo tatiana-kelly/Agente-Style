@@ -52,8 +52,14 @@ export const NOVELTY_LEVELS = ['classico', 'equilibrado', 'ousado'] as const
 export type NoveltyLevel = (typeof NOVELTY_LEVELS)[number]
 export const noveltySchema = z.enum(NOVELTY_LEVELS)
 
+/** O que a pessoa escolhe na tela. O sistema decide o nível de elegância. */
+export const CLIMAS = ['calor', 'ameno', 'frio', 'auto'] as const
+export const climaSchema = z.enum(CLIMAS)
+
 export const generateLookRequestSchema = z.object({
-  style: styleSchema,
+  // Opcional: com a tela nova, a ocasião basta e o estilo é deduzido.
+  style: styleSchema.optional(),
+  clima: climaSchema.default('auto'),
   occasion: occasionSchema.optional(),
   context: z.string().max(500).optional(),
   weather: z

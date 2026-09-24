@@ -4,7 +4,9 @@ import type { OutfitFormula, FormulaSlot } from '@/schemas/formula'
 import { OUTFIT_FORMULAS } from '@/data/outfit-formulas'
 import { matchesSlot, slotAffinity } from './archetypes'
 import { avaliarCoerencia, nucleoDoLook, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
-import { analyzePalette, colorCompatibility, type PaletteAnalysis } from './color-engine'
+import { normalizeColor } from '@/lib/wardrobe/colors'
+import { afinidadeComReferencias, avaliarPaleta } from './style-dna'
+import { analyzePalette, colorCompatibility, colorRelation, type PaletteAnalysis } from './color-engine'
 import { ruleFor } from '@/lib/wardrobe/style-rules'
 
 /**
@@ -20,6 +22,8 @@ export interface EngineContext {
   style: Style
   occasion?: string
   season?: string
+  /** Clima do dia: decide fórmula, camada e calçado. */
+  clima?: 'calor' | 'ameno' | 'frio'
   formalityOverride?: [number, number]
   favoriteColors: string[]
   avoidColors: string[]
@@ -86,6 +90,14 @@ function isUsable(item: WardrobeItem, ctx: EngineContext, tier: number): boolean
 
   // Funcionalidade esportiva nunca cede: salto não vai para a quadra, em nenhum tier.
   if ((ctx.style === 'tenis' || ctx.style === 'esporte') && item.formality >= 6) return false
+
+  // Equipamento de quadra só em contexto de quadra: raqueteira não é bolsa de
+  // viagem e viseira de tênis não termina look de passeio.
+  const daQuadra = ['raqueteira', 'viseira'].includes(item.subcategory)
+  const contextoDeQuadra =
+    ctx.style === 'tenis' || ctx.style === 'esporte' ||
+    ctx.occasion === 'partida-tenis' || ctx.occasion === 'treino'
+  if (daQuadra && !contextoDeQuadra) return false
 
   // Modéstia é pedido explícito do usuário; só cede se ele baixar o nível.
   if (ctx.modestyLevel >= 2 && ['shorts', 'top-esportivo', 'regata'].includes(item.subcategory)) {
@@ -198,7 +210,15 @@ function buildFromFormula(
   // Look montado ainda não é look bom: aqui entram as regras de composição.
   // Reprovar tudo neste tier é de propósito — o tier seguinte afrouxa, e vale
   // mais tentar de novo do que entregar blusa social com tênis.
-  const coerentes = complete.filter((p) => avaliarCoerencia(p.picks, { tier, formula }).length === 0)
+  // Portões, na ordem: composição, cor e clima. Look que não passa não é
+  // mostrado — a pessoa não deveria precisar descartar look feio na mão.
+  const coerentes = complete.filter(
+    (p) =>
+      avaliarCoerencia(p.picks, { tier, formula }).length === 0 &&
+      (tier >= 4 || avaliarPaleta(p.picks).aprovada) &&
+      travaDeCorOk(p.picks, formula) &&
+      climaOk(p.picks, ctx.clima, tier),
+  )
   if (coerentes.length === 0) return []
 
   return coerentes.map((p) => {
@@ -257,8 +277,9 @@ function addOptional(
   if (!slots.some((s) => s.role === 'bag')) slots.push(BOLSA_PADRAO)
 
   for (const slot of slots) {
-    // Sobreposição não é acabamento: só entra se fizer frio ou a fórmula exigir.
-    if (slot.role === 'outerwear' && !ctx.season?.includes('inverno')) continue
+    // Terceira peça é styling, não agasalho: nas referências o blazer aparece
+    // o ano inteiro. Só não entra quando faz calor — aí vira desconforto.
+    if (slot.role === 'outerwear' && ctx.clima === 'calor') continue
 
     const limite = MAX_POR_PAPEL[slot.role] ?? 1
     const familiasUsadas = new Set<string>()
@@ -320,6 +341,60 @@ function familiaDoAcessorio(subcategoria: string): string {
   return subcategoria
 }
 
+/**
+ * A fórmula que promete uma paleta precisa entregá-la. Sem isto o motor
+ * chamava de "All Black" um look com camisa branca e sapato bege.
+ */
+function travaDeCorOk(
+  picks: Array<{ item: WardrobeItem; role: OutfitRole }>,
+  formula: OutfitFormula,
+): boolean {
+  if (!formula.palette_lock) return true
+
+  const nucleo = picks.filter((p) => ['top', 'bottom', 'dress', 'outerwear', 'shoes'].includes(p.role))
+  if (nucleo.length === 0) return false
+
+  if (formula.palette_lock === 'black') {
+    return nucleo.every((p) => normalizeColor(p.item.color) === 'preto')
+  }
+  // Monocromático aceita tons vizinhos, não "tudo neutro": branco com preto
+  // são os dois neutros e não formam tom sobre tom.
+  for (let i = 0; i < nucleo.length; i++) {
+    for (let j = i + 1; j < nucleo.length; j++) {
+      const relacao = colorRelation(nucleo[i].item.color, nucleo[j].item.color)
+      if (relacao !== 'MONOCHROMATIC' && relacao !== 'TONAL') return false
+    }
+  }
+  return true
+}
+
+/**
+ * Clima não é detalhe: casaco em 35 graus e regata em dia frio são erros que
+ * derrubam o look inteiro, por mais bonito que ele seja na tela.
+ */
+const PESADAS = ['casaco', 'sueter', 'corta-vento']
+const DE_CALOR = ['shorts', 'bermuda', 'top-esportivo', 'regata']
+
+function climaOk(
+  picks: Array<{ item: WardrobeItem; role: OutfitRole }>,
+  clima: EngineContext['clima'],
+  tier: number,
+): boolean {
+  if (!clima || tier >= 4) return true
+
+  if (clima === 'calor') {
+    return !picks.some((p) => PESADAS.includes(p.item.subcategory))
+  }
+  if (clima === 'frio') {
+    // Peça de calor no frio só passa quando há camada cobrindo o look.
+    const temCamada = picks.some((p) => p.role === 'outerwear')
+    const temPecaDeCalor = picks.some((p) => DE_CALOR.includes(p.item.subcategory))
+    if (temPecaDeCalor && !temCamada) return false
+    return !picks.some((p) => ['chinelo', 'sandalia'].includes(p.item.subcategory))
+  }
+  return true
+}
+
 // ────────────────────────────────────────────────────────────────── ranking
 
 function score(
@@ -337,9 +412,13 @@ function score(
     (picks.reduce((s, p) => s + p.slotAffinity, 0) / Math.max(picks.length, 1)) * (1 - (tier - 1) * 0.12),
   )
 
-  // Cor: nota da paleta, com bônus se bate com um padrão previsto pela fórmula.
+  // Cor: paleta do look + o quanto ela repete a linguagem das referências.
+  // Sem esta segunda parte, "tecnicamente compatível" ganhava de "bonito".
   const patternBonus = formula.color_patterns.includes(palette.dominant) ? 0.12 : 0
-  const color_match = clamp01(palette.score + patternBonus)
+  const dna = avaliarPaleta(picks)
+  const color_match = clamp01(
+    (palette.score + patternBonus) * 0.5 + dna.nota * 0.3 + afinidadeComReferencias(picks) * 0.2,
+  )
 
   const avgFormality = items.reduce((s, i) => s + i.formality, 0) / Math.max(items.length, 1)
   const spread = items.length > 1 ? Math.max(...items.map((i) => i.formality)) - Math.min(...items.map((i) => i.formality)) : 0
@@ -347,7 +426,11 @@ function score(
   const target = (fmin + fmax) / 2
   const formality_match = clamp01(1 - Math.abs(avgFormality - target) / 5) * clamp01(1 - spread / 9)
 
+  // Style gate: a fórmula que veio das referências dela vale mais que uma
+  // fórmula genérica igualmente aplicável.
+  const bonusReferencia = formula.source_type === 'style-reference' ? 0.15 : 0
   const style_match = clamp01(
+    bonusReferencia +
     (formula.style.includes(ctx.style) ? 0.6 : 0.25) +
       (items.filter((i) => rule.preferredSubcategories[i.category as OutfitRole]?.includes(i.subcategory)).length /
         Math.max(items.length, 1)) *
@@ -427,10 +510,14 @@ export function generateCandidates(
   const pool = items.filter((i) => i.active)
   const rolesPresent = new Set(pool.map((i) => i.category as OutfitRole))
 
+  const climaOkFormula = (f: OutfitFormula) => !ctx.clima || f.weather.includes(ctx.clima)
+
   const byStyleAndOccasion = OUTFIT_FORMULAS.filter(
-    (f) => f.active && f.style.includes(ctx.style) && (!ctx.occasion || f.occasion.includes(ctx.occasion as never)),
+    (f) =>
+      f.active && climaOkFormula(f) && f.style.includes(ctx.style) &&
+      (!ctx.occasion || f.occasion.includes(ctx.occasion as never)),
   )
-  const byStyle = OUTFIT_FORMULAS.filter((f) => f.active && f.style.includes(ctx.style))
+  const byStyle = OUTFIT_FORMULAS.filter((f) => f.active && climaOkFormula(f) && f.style.includes(ctx.style))
   const universal = OUTFIT_FORMULAS.filter((f) => f.category === 'universal')
 
   const ladder: Array<{ tier: number; formulas: OutfitFormula[] }> = [
@@ -494,10 +581,15 @@ function diagnoseGap(items: WardrobeItem[], ctx: EngineContext): OutfitRole[] {
  * o motor ficava satisfeito e a usuária, nua. Quando nem isto é possível, a
  * resposta certa é dizer o que falta, não inventar um conjunto.
  */
-function coversBody(picks: Array<{ role: OutfitRole }>): boolean {
+function coversBody(picks: Array<{ role: OutfitRole; item: WardrobeItem }>): boolean {
   const roles = new Set(picks.map((p) => p.role))
   if (roles.has('dress')) return true
-  return roles.has('top') && roles.has('bottom')
+
+  // Colete veste o tronco: nas referências ele aparece sozinho sobre a calça,
+  // sem blusa por baixo. Exigir uma "parte de cima" fazia o motor descartar
+  // toda fórmula de colete — a peça existia no armário e nunca saía.
+  const cobreTronco = roles.has('top') || picks.some((p) => p.item.subcategory === 'colete')
+  return cobreTronco && roles.has('bottom')
 }
 
 /** Assinatura do conjunto de peças — dois looks com as mesmas peças são o mesmo look. */

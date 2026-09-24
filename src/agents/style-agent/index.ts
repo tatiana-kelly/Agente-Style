@@ -25,6 +25,8 @@ export interface StyleIntent {
   novelty: NoveltyLevel
   /** O que foi entendido da frase livre, para a UI poder confirmar. */
   understood: ReturnType<typeof extractContext>
+  /** Clima efetivo do look: escolhido na tela, dito no texto ou deduzido. */
+  clima: 'calor' | 'ameno' | 'frio'
 }
 
 const PERIOD_HINTS: Array<{ re: RegExp; note: string }> = [
@@ -47,13 +49,45 @@ const COLOR_HINTS = [
  * Interpreta a intenção sem chamar IA.
  * O texto livre do MVP é curto e previsível; regex resolve e sai de graça (PRP §59).
  */
+/**
+ * A pessoa escolhe ONDE vai, não o "estilo": quem decide o nível de elegância
+ * é o sistema. Este mapa é essa decisão, e vale quando a tela não manda estilo.
+ */
+const ESTILO_POR_OCASIAO: Record<string, Style> = {
+  trabalho: 'trabalho',
+  reuniao: 'trabalho',
+  igreja: 'igreja',
+  'dia-comum': 'dia-a-dia',
+  almoco: 'social',
+  jantar: 'jantar',
+  passeio: 'casual',
+  viagem: 'viagem',
+  'partida-tenis': 'tenis',
+  treino: 'esporte',
+  evento: 'evento',
+  festa: 'festa',
+}
+
+export function estiloParaOcasiao(occasion?: string): Style {
+  return (occasion && ESTILO_POR_OCASIAO[occasion]) || 'casual'
+}
+
+/** Clima escolhido na tela vira estação, que é o que as peças declaram. */
+export function estacaoParaClima(clima?: string): string | undefined {
+  if (clima === 'calor') return 'verao'
+  if (clima === 'frio') return 'inverno'
+  if (clima === 'ameno') return 'outono'
+  return undefined
+}
+
 export function resolveStyleIntent(input: {
-  style: Style
+  style?: Style
   occasion?: string
   context?: string
   weather?: { temperature?: number; rain?: boolean }
   profile?: StyleProfile | null
   novelty?: NoveltyLevel
+  clima?: string
 }): StyleIntent {
   const context = input.context ?? ''
   const notes: string[] = []
@@ -61,8 +95,9 @@ export function resolveStyleIntent(input: {
   // A frase livre pode redefinir estilo e ocasiao: "vou a igreja" vale mais
   // que o estilo que veio marcado na tela.
   const understood = extractContext(context)
-  const style = understood.style ?? input.style
   const occasion = input.occasion ?? understood.occasion
+  // Ordem: o que ela escreveu > o que a tela mandou > o que a ocasião pede.
+  const style = understood.style ?? input.style ?? estiloParaOcasiao(occasion)
 
   const rule = ruleFor(style)
   let [min, max] = formalityForContext(input.profile ?? null, style) ?? rule.formality
@@ -106,7 +141,8 @@ export function resolveStyleIntent(input: {
   return {
     style,
     occasion: occasion ?? rule.defaultOccasion,
-    season: detectSeason(context, weather?.temperature),
+    season: estacaoParaClima(input.clima) ?? detectSeason(context, weather?.temperature),
+    clima: climaEfetivo(input.clima, context, weather?.temperature),
     formality: [min, max],
     requestedColors: extractMatches(context, COLOR_HINTS).map(normalizeColorWord),
     requestedSubcategories: extractMatches(context, SUBCATEGORY_HINTS).map(normalizeSubcategory),
@@ -148,4 +184,24 @@ function monthToSeasonIndex(month: number): number {
   if (month <= 4) return 1
   if (month <= 7) return 2
   return 3
+}
+
+/** Sem escolha explícita, o clima sai da estação corrente ou do que ela escreveu. */
+function climaEfetivo(
+  clima: string | undefined,
+  context: string,
+  temperature?: number,
+): 'calor' | 'ameno' | 'frio' {
+  if (clima === 'calor' || clima === 'ameno' || clima === 'frio') return clima
+  if (typeof temperature === 'number') {
+    if (temperature >= 26) return 'calor'
+    if (temperature <= 17) return 'frio'
+    return 'ameno'
+  }
+  if (/calor|quente|ver[aã]o/i.test(context)) return 'calor'
+  if (/frio|inverno/i.test(context)) return 'frio'
+  const estacao = SEASONS[monthToSeasonIndex(new Date().getUTCMonth())]
+  if (estacao === 'verao') return 'calor'
+  if (estacao === 'inverno') return 'frio'
+  return 'ameno'
 }

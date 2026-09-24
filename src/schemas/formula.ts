@@ -48,7 +48,15 @@ export const SILHOUETTES = [
 export type Silhouette = (typeof SILHOUETTES)[number]
 
 /** De onde veio a regra — exigido pelo §22/§23. */
-export const SOURCE_TYPES = ['styling-principle', 'dress-code', 'sport-functional', 'color-theory'] as const
+export const SOURCE_TYPES = [
+  'styling-principle', 'dress-code', 'sport-functional', 'color-theory',
+  // Fórmula tirada das referências visuais que a usuária escolheu como padrão.
+  'style-reference',
+] as const
+
+/** Clima em que a fórmula funciona. Nada de casaco em 35 graus. */
+export const WEATHERS = ['calor', 'ameno', 'frio'] as const
+export type Weather = (typeof WEATHERS)[number]
 
 export const formulaSlotSchema = z.object({
   role: z.enum(OUTFIT_ROLES),
@@ -65,9 +73,15 @@ export const outfitFormulaSchema = z.object({
   occasion: z.array(occasionSchema).min(1),
   formality: z.tuple([z.number().int().min(0).max(10), z.number().int().min(0).max(10)]),
   season: z.array(seasonSchema).default(['verao', 'outono', 'inverno', 'primavera']),
+  weather: z.array(z.enum(WEATHERS)).default(['calor', 'ameno', 'frio']),
   required_roles: z.array(formulaSlotSchema).min(1),
   optional_roles: z.array(formulaSlotSchema).default([]),
   color_patterns: z.array(z.enum(COLOR_RELATIONS)).default([]),
+  /**
+   * Fórmula que só existe se a cor obedecer: "All Black" com camisa branca não
+   * é all black, é o motor mentindo o nome do look.
+   */
+  palette_lock: z.enum(['black', 'monochrome']).optional(),
   silhouette: z.enum(SILHOUETTES),
   description: z.string(),
   source_type: z.enum(SOURCE_TYPES),
