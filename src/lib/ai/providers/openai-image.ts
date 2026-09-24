@@ -30,11 +30,16 @@ export class OpenAIImageProvider implements ImageProvider {
 
       if (files.length === 0) throw new Error('Nenhuma referência visual disponível')
 
+      const temPessoa = input.references.some((r) => r.kind === 'person')
       const response = await this.client.images.edit({
         model: env.imageModel,
         image: files,
         prompt: buildPrompt(input),
         size: input.size,
+        quality: input.quality,
+        // Fidelidade alta preserva o rosto da referência — custa mais, então
+        // só entra na imagem definitiva, não na prévia.
+        ...(temPessoa && input.quality === 'high' ? { input_fidelity: 'high' as const } : {}),
         n: 1,
       })
 
@@ -46,7 +51,7 @@ export class OpenAIImageProvider implements ImageProvider {
         image_base64: b64,
         model: env.imageModel,
         provider: this.name,
-        estimated_cost: estimateImageCost(1),
+        estimated_cost: estimateImageCost(1, input.quality),
         latency_ms: Date.now() - started,
       }
     } catch (error) {

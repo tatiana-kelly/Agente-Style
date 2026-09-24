@@ -35,6 +35,8 @@ export function runImageDirector(input: ImageDirectorInput): ImageGenerationInpu
     references,
     garments: input.items.map(({ item, role }) => ({ role, name: item.name, color: item.color })),
     size: '1024x1536',
+    // Quem chama decide: prévia das 3 opções baixa, look salvo alto.
+    quality: 'high',
   }
 }
 

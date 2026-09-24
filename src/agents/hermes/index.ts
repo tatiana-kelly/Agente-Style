@@ -233,7 +233,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       prompt: image.prompt,
       image_url: image.ref,
       model: image.model,
-      generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy },
+      generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy, qualidade: 'final' },
       quality_score: image.qualityScore,
     })
 
@@ -258,14 +258,25 @@ export async function renderLookImage(args: {
   repo: Repository
   userId: string
   outfitId: string
+  /**
+   * 'previa' veste as 3 opções assim que elas saem: qualidade média, uma
+   * tentativa, sem checagem visual — bem mais rápido e barato que a imagem
+   * definitiva. 'final' é o acabamento do look que a pessoa salvou.
+   */
+  qualidade?: 'previa' | 'final'
 }): Promise<{ success: boolean; imageUrl?: string; error?: string; costUsd: number }> {
   const { repo, userId, outfitId } = args
+  const qualidade = args.qualidade ?? 'final'
   const budget = new CostBudget()
 
   const existente = await repo.getGeneratedLook(userId, outfitId)
   if (existente?.image_url) {
-    // Já gerada: reaproveitar em vez de pagar de novo (PRP §35).
-    return { success: true, imageUrl: existente.image_url, costUsd: 0 }
+    const jaEFinal = (existente.generation_metadata as { qualidade?: string } | null)?.qualidade !== 'previa'
+    // Reaproveitar em vez de pagar de novo (PRP §35). A exceção é a prévia
+    // quando a pessoa salva o look: aí vale refazer com acabamento.
+    if (jaEFinal || qualidade === 'previa') {
+      return { success: true, imageUrl: existente.image_url, costUsd: 0 }
+    }
   }
 
   const outfit = await repo.getOutfit(userId, outfitId)
@@ -297,6 +308,7 @@ export async function renderLookImage(args: {
     photoUrl: photo?.image_url ?? null,
     budget,
     repo,
+    qualidade,
   })
 
   if (!image.url) return { success: false, error: image.warning, costUsd: budget.total }
@@ -307,7 +319,7 @@ export async function renderLookImage(args: {
     prompt: image.prompt,
     image_url: image.ref,
     model: image.model,
-    generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy },
+    generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy, qualidade },
     quality_score: image.qualityScore,
   })
 
@@ -336,10 +348,13 @@ async function renderWithRetries(args: {
   photoUrl: string | null
   budget: CostBudget
   repo: Repository
+  qualidade?: 'previa' | 'final'
 }): Promise<RenderOutcome> {
   const { request, outfit, intent, photoUrl, budget, repo } = args
+  const previa = args.qualidade === 'previa'
   const provider = getImageProvider()
-  const maxAttempts = 1 + env.maxImageRetries
+  // Prévia não repete: três opções na tela já são três gerações simultâneas.
+  const maxAttempts = previa ? 1 : 1 + env.maxImageRetries
 
   let corrections: string[] = []
   let lastIssues: string[] = []
@@ -353,9 +368,12 @@ async function renderWithRetries(args: {
       intent,
       correctionNotes: corrections,
     })
+    // Media na previa: 'low' borra tecido e rosto, e o ponto aqui e ver a
+    // roupa no corpo. 'high' fica para o look salvo.
+    direction.quality = previa ? 'medium' : 'high'
     lastPrompt = direction.prompt
 
-    const cost = estimateImageCost(1)
+    const cost = estimateImageCost(1, direction.quality)
     if (!budget.canAfford(cost)) {
       return {
         url: null, ref: null, prompt: lastPrompt, model: lastModel, attempts: attempt - 1,
@@ -384,7 +402,7 @@ async function renderWithRetries(args: {
       success: result.success,
     })
 
-    const qc = await runQualityControl({ result, request: direction, attempt, maxAttempts })
+    const qc = await runQualityControl({ result, request: direction, attempt, maxAttempts, skipVision: previa })
     if (qc.estimated_cost > 0) {
       try {
         budget.charge(qc.estimated_cost, 'quality-control')

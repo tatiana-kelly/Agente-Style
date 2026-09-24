@@ -6,7 +6,9 @@ import { env } from '@/lib/env'
  */
 export const PRICING = {
   text: { inputPer1M: 0.25, outputPer1M: 2.0 },
-  image: { perImage: 0.19 },
+  // Preço sobe com a qualidade: a prévia das 3 opções sai por centavos, o
+  // acabamento do look salvo custa o valor cheio.
+  image: { perImage: 0.19, low: 0.02, medium: 0.07, high: 0.19 },
 } as const
 
 export function estimateTextCost(inputTokens: number, outputTokens: number): number {
@@ -16,8 +18,8 @@ export function estimateTextCost(inputTokens: number, outputTokens: number): num
   return Number(cost.toFixed(6))
 }
 
-export function estimateImageCost(images = 1): number {
-  return Number((images * PRICING.image.perImage).toFixed(6))
+export function estimateImageCost(images = 1, quality: 'low' | 'medium' | 'high' = 'high'): number {
+  return Number((images * PRICING.image[quality]).toFixed(6))
 }
 
 /** Aproximação suficiente para orçamento; não precisa de tokenizer real. */

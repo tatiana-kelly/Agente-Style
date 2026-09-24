@@ -8,6 +8,12 @@ export interface QualityControlInput {
   request: ImageGenerationInput
   attempt: number
   maxAttempts: number
+  /**
+   * Prévia não passa pela checagem visual: ela custa uma chamada de visão e
+   * alguns segundos por imagem, e aqui são três de uma vez. A checagem
+   * estrutural, que é grátis, continua rodando.
+   */
+  skipVision?: boolean
 }
 
 export interface QualityControlOutput extends QualityReport {
@@ -23,7 +29,7 @@ export interface QualityControlOutput extends QualityReport {
  */
 export async function runQualityControl(input: QualityControlInput): Promise<QualityControlOutput> {
   const structural = structuralCheck(input)
-  if (!structural.approved || !hasOpenAI || !input.result.image_base64) {
+  if (input.skipVision || !structural.approved || !hasOpenAI || !input.result.image_base64) {
     return structural
   }
 

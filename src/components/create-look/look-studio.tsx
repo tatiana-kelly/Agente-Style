@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Heart, Loader2, RefreshCw, Replace, Save, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -51,12 +52,26 @@ export function LookStudio() {
   const [result, setResult] = useState<LookResponse | null>(null)
   const [imagens, setImagens] = useState<Record<string, string>>({})
   const [gerando, setGerando] = useState<string | null>(null)
+  const [vestindo, setVestindo] = useState<Set<string>>(new Set())
+  const [semFoto, setSemFoto] = useState(false)
+  const [falhas, setFalhas] = useState<Record<string, string>>({})
   const [ajuste, setAjuste] = useState<Record<string, string>>({})
   const [ajustando, setAjustando] = useState<string | null>(null)
   const [swapRole, setSwapRole] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const resultRef = useRef<HTMLDivElement>(null)
+
+  // Sem foto no perfil, o look é vestido num manequim — dá para usar assim,
+  // mas quem quer se ver precisa saber onde colocar a foto.
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/profile')
+      .then((r) => r.json())
+      .then((d) => { if (vivo) setSemFoto(!d?.photo?.image_url) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [])
 
   // O contador avança só enquanto a requisição está em voo; o reset acontece ao disparar.
   useEffect(() => {
@@ -96,7 +111,9 @@ export function LookStudio() {
 
       setResult(payload)
       setImagens({})
+      setFalhas({})
       requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+      if (payload.proposals?.length) void vestirTodas(payload.proposals)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao montar o look.')
     } finally {
@@ -129,13 +146,10 @@ export function LookStudio() {
     // Look salvo é look guardado VESTIDO: sem a foto no corpo, Meus Looks vira
     // um mosaico de peças soltas. A geração é paga, mas salvar é um ato
     // deliberado — não acontece nas três opções, só na que ela escolheu.
-    if (imagens[p.outfitId]) {
-      setFeedback('Look salvo em Meus looks.')
-      return
-    }
-
-    setFeedback('Look salvo. Criando a foto com você vestindo…')
-    const ok = await verEmMim(p)
+    setGerando(p.outfitId)
+    setFeedback('Look salvo. Caprichando na foto com você vestindo…')
+    const ok = await vestir(p.outfitId, 'final')
+    setGerando(null)
     setFeedback(
       ok
         ? 'Look salvo em Meus looks, com a foto no corpo.'
@@ -156,23 +170,46 @@ export function LookStudio() {
     }
   }
 
-  /** A imagem custa; só gera a do look que a pessoa escolheu ver. */
-  async function verEmMim(p: Proposal): Promise<boolean> {
-    if (imagens[p.outfitId]) return true
-    setGerando(p.outfitId)
-    setError(null)
+  /**
+   * Veste o look num corpo. Look é roupa no corpo, não peça recortada: a
+   * prévia das 3 opções sai sozinha, em qualidade média, e o acabamento fica
+   * para a que a pessoa salvar.
+   */
+  async function vestir(outfitId: string, qualidade: 'previa' | 'final'): Promise<boolean> {
     try {
-      const res = await fetch(`/api/outfits/${p.outfitId}/image`, { method: 'POST' })
+      const res = await fetch(`/api/outfits/${outfitId}/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qualidade }),
+      })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error ?? 'Não consegui gerar a imagem.')
-      setImagens((prev) => ({ ...prev, [p.outfitId]: payload.imageUrl }))
+      setImagens((prev) => ({ ...prev, [outfitId]: payload.imageUrl }))
       return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falha ao gerar a imagem.')
+      // Falha de uma opção não derruba as outras: aquele cartão fica na
+      // vitrine de peças, com o aviso no lugar do corpo.
+      setFalhas((prev) => ({
+        ...prev,
+        [outfitId]: e instanceof Error ? e.message : 'Não consegui vestir este look.',
+      }))
       return false
-    } finally {
-      setGerando(null)
     }
+  }
+
+  /** Dispara as três de uma vez; cada cartão troca assim que a sua fica pronta. */
+  async function vestirTodas(propostas: Proposal[]) {
+    setVestindo(new Set(propostas.map((p) => p.outfitId)))
+    await Promise.all(
+      propostas.map(async (p) => {
+        await vestir(p.outfitId, 'previa')
+        setVestindo((prev) => {
+          const resto = new Set(prev)
+          resto.delete(p.outfitId)
+          return resto
+        })
+      }),
+    )
   }
 
   return (
@@ -283,6 +320,16 @@ export function LookStudio() {
             {result.degraded && <span className="text-xs text-mist">{result.imageWarning}</span>}
           </div>
 
+          {semFoto && (
+            <p className="mt-2 rounded-soft bg-ivory px-3 py-2 text-xs leading-relaxed text-cocoa">
+              Estou vestindo os looks num manequim.{' '}
+              <Link href="/profile" className="underline underline-offset-2">
+                Coloque uma foto sua de corpo inteiro no perfil
+              </Link>{' '}
+              para se ver com as roupas.
+            </p>
+          )}
+
           {feedback && <p className="mt-2 text-xs text-cocoa">{feedback}</p>}
           {result.refinementNotes && result.refinementNotes.length > 0 && (
             <p className="mt-2 rounded-soft bg-ivory px-3 py-2 text-xs leading-relaxed text-cocoa">
@@ -300,9 +347,21 @@ export function LookStudio() {
                       // eslint-disable-next-line @next/next/no-img-element -- URL assinada
                       <img src={imagem} alt={`Opção ${i + 1}`} className="size-full object-cover" />
                     ) : (
-                      // Vitrine imediata: a combinacao aparece pronta, sem esperar
-                      // imagem gerada. A foto no corpo sai ao salvar o look.
-                      <LookCollage items={p.items} />
+                      // Enquanto a foto no corpo nao chega, as pecas ja aparecem
+                      // compostas — a tela nunca fica vazia esperando.
+                      <>
+                        <LookCollage items={p.items} />
+                        {vestindo.has(p.outfitId) && (
+                          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-bone/85 py-2 text-xs text-cocoa backdrop-blur-sm">
+                            <Loader2 className="size-3.5 animate-spin" /> Vestindo o look…
+                          </span>
+                        )}
+                        {falhas[p.outfitId] && !vestindo.has(p.outfitId) && (
+                          <span className="absolute inset-x-0 bottom-0 bg-bone/90 px-3 py-2 text-[0.6875rem] leading-snug text-cocoa">
+                            {falhas[p.outfitId]}
+                          </span>
+                        )}
+                      </>
                     )}
                     <span className="absolute left-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 text-[0.625rem] font-medium">
                       {i === 0 ? 'Principal' : `Opção ${i + 1}`}

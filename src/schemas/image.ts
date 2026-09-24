@@ -23,6 +23,11 @@ export const imageGenerationInputSchema = z.object({
   /** Sempre completo; `references` só traz as peças que têm imagem. */
   garments: z.array(garmentDescriptorSchema).default([]),
   size: z.enum(['1024x1024', '1024x1536', '1536x1024']).default('1024x1536'),
+  /**
+   * 'low' é a prévia das 3 opções: sai em segundos e custa uma fração.
+   * 'high' é a do look salvo, onde vale pagar por acabamento e semelhança.
+   */
+  quality: z.enum(['low', 'medium', 'high']).default('high'),
 })
 export type ImageGenerationInput = z.infer<typeof imageGenerationInputSchema>
 
