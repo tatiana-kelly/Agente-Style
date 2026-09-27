@@ -510,13 +510,30 @@ const UNIVERSAL: OutfitFormula[] = [
     'styling-principle', 'estrutura base', 0.2),
 ]
 
-export const OUTFIT_FORMULAS: OutfitFormula[] = [
+/**
+ * Fórmula que EXIGE terceira peça não existe no calor.
+ *
+ * As fórmulas antigas não declaravam clima e valiam para os três — por isso
+ * "Jeans e Blazer" continuava aparecendo com 35 graus. Colete é exceção: sem
+ * manga, funciona no verão (e é assim que aparece nas referências de verão).
+ */
+function ajustarClima(formulas: OutfitFormula[]): OutfitFormula[] {
+  return formulas.map((f) => {
+    const exigeSobreposicao = f.required_roles.some(
+      (slot) => slot.role === 'outerwear' && !slot.archetypes.every((a) => a === 'vest'),
+    )
+    if (!exigeSobreposicao || !f.weather.includes('calor')) return f
+    return { ...f, weather: f.weather.filter((c) => c !== 'calor') }
+  })
+}
+
+export const OUTFIT_FORMULAS: OutfitFormula[] = ajustarClima([
   // As referências da usuária vêm primeiro: em empate, o motor reproduz o que
   // ela já disse que acha bonito, em vez de uma combinação só possível.
   ...REFERENCE_FORMULAS,
   ...WORK, ...CHURCH, ...TENNIS, ...SPORT, ...CASUAL, ...DINNER, ...EVENT, ...TRAVEL,
   ...CAPSULE_FORMULAS, ...UNIVERSAL,
-]
+])
 
 export const FORMULA_COUNT = OUTFIT_FORMULAS.length
 

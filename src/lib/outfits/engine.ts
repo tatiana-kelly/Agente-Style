@@ -375,8 +375,10 @@ function travaDeCorOk(
  * Clima não é detalhe: casaco em 35 graus e regata em dia frio são erros que
  * derrubam o look inteiro, por mais bonito que ele seja na tela.
  */
-const PESADAS = ['casaco', 'sueter', 'corta-vento']
+const PESADAS = ['casaco', 'sueter', 'corta-vento', 'bota']
 const DE_CALOR = ['shorts', 'bermuda', 'top-esportivo', 'regata']
+/** Colete é sobreposição sem manga: é a única que sobrevive ao calor. */
+const SOBREPOSICAO_DE_CALOR = ['colete']
 
 function climaOk(
   picks: Array<{ item: WardrobeItem; role: OutfitRole }>,
@@ -386,7 +388,12 @@ function climaOk(
   if (!clima || tier >= 4) return true
 
   if (clima === 'calor') {
-    return !picks.some((p) => PESADAS.includes(p.item.subcategory))
+    if (picks.some((p) => PESADAS.includes(p.item.subcategory))) return false
+    // Blazer e casaquinho em 35 graus é o erro que ela viu na tela: escolheu
+    // calor e recebeu look de frio. Sobreposição no calor, só colete.
+    return !picks.some(
+      (p) => p.role === 'outerwear' && !SOBREPOSICAO_DE_CALOR.includes(p.item.subcategory),
+    )
   }
   if (clima === 'frio') {
     // Peça de calor no frio só passa quando há camada cobrindo o look.

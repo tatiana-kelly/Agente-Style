@@ -234,3 +234,36 @@ describe('a explicação fala como stylist', () => {
     expect(etiquetas).toContain('Mais confortável')
   })
 })
+
+describe('clima escolhido vale mais que a fórmula', () => {
+  const contextos = ['trabalho', 'almoco', 'jantar', 'passeio', 'dia-comum', 'viagem'] as const
+
+  it('no calor nenhum look sai com blazer, casaco ou bota', () => {
+    for (const occasion of contextos) {
+      const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion, clima: 'calor', style: 'moderno' }), 3)
+      for (const c of r.candidates) {
+        const sobreposicao = c.items.find((i) => i.role === 'outerwear')
+        if (sobreposicao) expect(sobreposicao.item.subcategory).toBe('colete')
+        expect(c.items.map((i) => i.item.subcategory)).not.toContain('casaco')
+        expect(c.items.map((i) => i.item.subcategory)).not.toContain('bota')
+      }
+    }
+  })
+
+  it('o colete sobrevive ao calor — é sobreposição sem manga', () => {
+    const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion: 'almoco', clima: 'calor', style: 'moderno' }), 3)
+    expect(r.candidates.length).toBeGreaterThan(0)
+  })
+
+  it('no frio ninguém sai de sandália nem de short sem camada', () => {
+    for (const occasion of contextos) {
+      const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion, clima: 'frio', style: 'moderno' }), 3)
+      for (const c of r.candidates) {
+        if (c.tier > 3) continue
+        const subs = c.items.map((i) => i.item.subcategory)
+        expect(subs).not.toContain('sandalia')
+        if (subs.includes('shorts')) expect(c.items.some((i) => i.role === 'outerwear')).toBe(true)
+      }
+    }
+  })
+})
