@@ -4,7 +4,7 @@ import type { OutfitFormula, FormulaSlot } from '@/schemas/formula'
 import { OUTFIT_FORMULAS } from '@/data/outfit-formulas'
 import { matchesSlot, slotAffinity } from './archetypes'
 import { avaliarCoerencia, nucleoDoLook, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
-import { classificarCor } from './style-dna'
+import { classificarCor, corDaEstacao } from './style-dna'
 import { normalizeColor } from '@/lib/wardrobe/colors'
 import { afinidadeComReferencias, avaliarPaleta } from './style-dna'
 import { comparavel, limitarPorFormula, selecionarDiversos } from './diversity'
@@ -99,15 +99,17 @@ function isUsable(item: WardrobeItem, ctx: EngineContext, tier: number): boolean
   // Funcionalidade esportiva nunca cede: salto não vai para a quadra, em nenhum tier.
   if ((ctx.style === 'tenis' || ctx.style === 'esporte') && item.formality >= 6) return false
 
-  // Equipamento de quadra só em contexto de quadra: raqueteira não é bolsa de
-  // viagem e viseira de tênis não termina look de passeio.
-  // Tênis de quadra e de corrida são equipamento: fora do esporte, o tênis
-  // casual faz o papel e o técnico destoa do look.
-  const daQuadra = ['raqueteira', 'viseira', 'tenis-tenis', 'tenis-corrida'].includes(item.subcategory)
-  const contextoDeQuadra =
+  // Roupa de esporte é equipamento: top de treino, skort de quadra, raqueteira
+  // e tênis técnico não terminam look de passeio. 'geral' fica de fora da
+  // regra — é o tênis branco do dia a dia, que as referências usam em tudo.
+  const ESPORTES_ESPECIFICOS = ['tenis', 'corrida', 'academia', 'yoga']
+  const equipamento =
+    ESPORTES_ESPECIFICOS.includes(item.sport_type) ||
+    ['raqueteira', 'viseira', 'tenis-tenis', 'tenis-corrida'].includes(item.subcategory)
+  const contextoEsportivo =
     ctx.style === 'tenis' || ctx.style === 'esporte' ||
     ctx.occasion === 'partida-tenis' || ctx.occasion === 'treino'
-  if (daQuadra && !contextoDeQuadra) return false
+  if (equipamento && !contextoEsportivo) return false
 
   // Modéstia é pedido explícito do usuário; só cede se ele baixar o nível.
   if (ctx.modestyLevel >= 2 && ['shorts', 'top-esportivo', 'regata'].includes(item.subcategory)) {
@@ -158,6 +160,8 @@ function valorDeCor(
   // Peça da estação corrente ganha um empurrão — sem virar filtro, senão
   // guarda-roupa pequeno trava.
   if (ctxSeasonBonus(item)) valor += 0.05
+  // E a cartela de cor da estação, que é o que as pranchas destacam.
+  if (corDaEstacao(item.color, estacaoAtual)) valor += 0.08
 
   return valor
 }
@@ -335,6 +339,13 @@ function buildFromFormula(
   })
 }
 
+/**
+ * Acessório e bolsa estão desligados a pedido dela: o que está cadastrado
+ * nesses papéis veio junto das fotos em lote e não é o acervo real. Volta a
+ * ligar quando ela cadastrar os acessórios de verdade — é só trocar para true.
+ */
+const ACABAMENTO_ATIVO = false
+
 /** Quantas peças cada papel opcional pode contribuir. */
 const MAX_POR_PAPEL: Partial<Record<OutfitRole, number>> = {
   accessory: MAX_ACESSORIOS,
@@ -391,10 +402,13 @@ function addOptional(
     slots.unshift(SOBREPOSICAO_PADRAO)
   }
   // Sem acessório na fórmula, usa o padrão: a pessoa quer o look terminado.
-  if (!slots.some((s) => s.role === 'accessory')) slots.push(ACESSORIO_PADRAO)
-  if (!slots.some((s) => s.role === 'bag')) slots.push(BOLSA_PADRAO)
+  if (ACABAMENTO_ATIVO) {
+    if (!slots.some((s) => s.role === 'accessory')) slots.push(ACESSORIO_PADRAO)
+    if (!slots.some((s) => s.role === 'bag')) slots.push(BOLSA_PADRAO)
+  }
 
   for (const slot of slots) {
+    if (!ACABAMENTO_ATIVO && (slot.role === 'accessory' || slot.role === 'bag')) continue
 
     // Um acessório termina o look; o segundo só quando a fórmula pede — e
     // ainda assim precisa acrescentar algo, não repetir o primeiro.

@@ -1,6 +1,7 @@
 import { getContext } from '@/services/context'
 import { generateLookRequestSchema } from '@/schemas/outfit'
 import { runHermes } from '@/agents/hermes'
+import { runShoppingAgent } from '@/agents/shopping-agent'
 import { fail, ok } from '../_lib/handler'
 
 export const maxDuration = 120
@@ -14,10 +15,14 @@ export async function POST(request: Request) {
     const result = await runHermes({ ...body, userId: user.id, intent: 'generate_look' }, { repo })
     if (!result.success) return ok(result, 422)
 
-    const itemsById = new Map((await repo.listItems(user.id)).map((i) => [i.id, i]))
+    const itens = await repo.listItems(user.id)
+    const itemsById = new Map(itens.map((i) => [i.id, i]))
 
     return ok({
       ...result,
+      // "Você já tem essa calça; com uma blusa assim fica melhor" — sugestões
+      // ancoradas no que ela tem, não em catálogo.
+      compras: runShoppingAgent(itens, 3),
       // A UI precisa das peças para exibir foto e nome sem uma segunda chamada.
       proposals: result.proposals?.map((p) => ({
         outfitId: p.outfitId,

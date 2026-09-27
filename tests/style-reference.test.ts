@@ -307,3 +307,32 @@ describe('pedido explícito vence o clima', () => {
     expect(r.candidates.some((c) => c.items.some((i) => i.item.id === 'blazer-preto'))).toBe(true)
   })
 })
+
+describe('cartela e estrutura por estação', () => {
+  it('cada clima usa fórmulas diferentes — ameno não é igual a frio', () => {
+    const porClima = (['calor', 'ameno', 'frio'] as const).map((clima) =>
+      generateCandidates(GUARDA_ROUPA, ctx({ occasion: 'trabalho', clima, style: 'trabalho' }), 3)
+        .candidates.map((c) => c.formula.id)
+        .join('|'),
+    )
+    expect(new Set(porClima).size).toBeGreaterThan(1)
+  })
+
+  it('roupa de treino não entra em look de passeio', () => {
+    const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion: 'passeio', clima: 'calor', style: 'casual' }), 3)
+    for (const c of r.candidates) {
+      for (const i of c.items) {
+        expect(['tenis', 'corrida', 'academia', 'yoga']).not.toContain(i.item.sport_type)
+      }
+    }
+  })
+
+  it('a biblioteca tem fórmula própria de cada estação', () => {
+    for (const estacao of ['verao', 'outono', 'inverno', 'primavera']) {
+      const daEstacao = OUTFIT_FORMULAS.filter(
+        (f) => f.category === 'season' && f.season.includes(estacao as never),
+      )
+      expect(daEstacao.length).toBeGreaterThan(0)
+    }
+  })
+})

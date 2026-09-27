@@ -23,7 +23,16 @@ interface Proposal {
   items: Array<{ role: string; item: WardrobeItem }>
 }
 
+interface Compra {
+  ancora: { name: string }
+  peca: string
+  motivo: string
+  look: string
+  termoDeBusca: string
+}
+
 interface LookResponse {
+  compras?: Compra[]
   refinementNotes?: string[]
   success: boolean
   outfitId?: string
@@ -394,6 +403,33 @@ export function LookStudio() {
             <p className="mt-2 rounded-soft bg-ivory px-3 py-2 text-xs leading-relaxed text-cocoa">
               {result.refinementNotes.join(' ')}
             </p>
+          )}
+
+          {result.compras && result.compras.length > 0 && (
+            <section className="mt-6 rounded-card border border-dashed border-sand bg-ivory/50 p-4">
+              <p className="eyebrow flex items-center gap-1.5">
+                <ShoppingBag className="size-3" /> Com uma peça a mais
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-mist">
+                Sugestões a partir do que você já tem — cada uma destrava um look das suas referências.
+              </p>
+              <ul className="mt-3 space-y-2.5">
+                {result.compras.map((c) => (
+                  <li key={c.termoDeBusca} className="text-xs leading-relaxed">
+                    <span className="font-medium text-espresso">{c.peca}</span>
+                    <span className="text-cocoa"> — {c.motivo}</span>{' '}
+                    <a
+                      href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(c.termoDeBusca)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 hover:text-espresso"
+                    >
+                      ver opções
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           <ul className="mt-5 grid gap-4 md:grid-cols-3">

@@ -71,12 +71,12 @@ function ctx(over: Partial<EngineContext> = {}): EngineContext {
 }
 
 describe('acessórios no look (§1)', () => {
-  it('inclui acessório quando existe no guarda-roupa', () => {
+  it('acabamento desligado: nenhum look sai com acessório ou bolsa', () => {
+    // A pedido dela, enquanto os acessórios de verdade não estão cadastrados.
     const r = generateCandidates(items, ctx(), 3)
-    const comAcessorio = r.candidates.filter((c) =>
-      c.items.some((i) => i.role === 'accessory' || i.role === 'bag'),
-    )
-    expect(comAcessorio.length).toBeGreaterThan(0)
+    for (const c of r.candidates) {
+      expect(c.items.some((i) => i.role === 'accessory' || i.role === 'bag')).toBe(false)
+    }
   })
 
   it('peça travada pelo ajuste sempre entra', () => {

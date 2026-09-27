@@ -96,6 +96,7 @@ const TERCEIRA_PECA: OutfitFormula[] = [
     silhueta: 'structured',
     descricao: 'Jeans com blazer e salto: a peça mais casual do armário indo para a mesa do jantar.',
     novelty: 0.2,
+      clima: ['ameno', 'frio'],
   }),
 
   f({
@@ -114,6 +115,7 @@ const TERCEIRA_PECA: OutfitFormula[] = [
     silhueta: 'relaxed',
     descricao: 'Blazer sobe o jeans, tênis segura o conjunto no dia a dia — nenhum dos dois manda sozinho.',
     novelty: 0.25,
+      clima: ['ameno', 'frio'],
   }),
 
   f({
@@ -133,6 +135,7 @@ const TERCEIRA_PECA: OutfitFormula[] = [
     silhueta: 'athletic',
     descricao: 'Legging com blazer e tênis: conforto de viagem sem parecer que saiu do treino.',
     novelty: 0.4,
+      clima: ['ameno', 'frio'],
   }),
 
   f({
@@ -155,6 +158,7 @@ const TERCEIRA_PECA: OutfitFormula[] = [
     silhueta: 'relaxed',
     descricao: 'Conjunto confortável em tom único, tênis e boné: dia corrido sem abrir mão da linha do look.',
     novelty: 0.3,
+      clima: ['ameno', 'frio'],
   }),
 ]
 
@@ -177,6 +181,7 @@ const ALFAIATARIA: OutfitFormula[] = [
     silhueta: 'column',
     descricao: 'Blazer e calça no mesmo tom com regata por baixo: o conjunto faz o trabalho, o resto só acompanha.',
     novelty: 0.15,
+      clima: ['ameno', 'frio'],
   }),
 
   f({
@@ -195,6 +200,7 @@ const ALFAIATARIA: OutfitFormula[] = [
     silhueta: 'column',
     descricao: 'Alfaiataria com tênis branco: casual chic de verdade, desde que o resto sustente o registro.',
     novelty: 0.35,
+      clima: ['calor', 'ameno'],
   }),
 
   f({
@@ -214,6 +220,7 @@ const ALFAIATARIA: OutfitFormula[] = [
     silhueta: 'column',
     descricao: 'Calça ampla com salto alonga a silhueta inteira; o blazer fecha a linha vertical.',
     novelty: 0.2,
+      clima: ['ameno', 'frio'],
   }),
 
   f({
@@ -233,6 +240,7 @@ const ALFAIATARIA: OutfitFormula[] = [
     silhueta: 'column',
     descricao: 'Blazer claro, top escuro e calça clara: contraste no meio do look, neutros nas pontas.',
     novelty: 0.35,
+      clima: ['ameno', 'frio'],
   }),
 
   f({
@@ -252,6 +260,7 @@ const ALFAIATARIA: OutfitFormula[] = [
     silhueta: 'structured',
     descricao: 'Base escura com brilho e blazer reto: moderno sem precisar de salto.',
     novelty: 0.5,
+      clima: ['ameno', 'frio'],
   }),
 ]
 
@@ -328,6 +337,7 @@ const COLETE: OutfitFormula[] = [
     silhueta: 'relaxed',
     descricao: 'Colete sobre camiseta com jeans: estrutura em cima, leveza embaixo.',
     novelty: 0.45,
+      clima: ['calor', 'ameno'],
   }),
 ]
 
@@ -467,6 +477,7 @@ const PALETA: OutfitFormula[] = [
     silhueta: 'relaxed',
     descricao: 'Poucas peças, styling intencional: básico bem escolhido com um acessório que termina o look.',
     novelty: 0.25,
+      clima: ['calor', 'ameno'],
   }),
 
   f({

@@ -1,6 +1,7 @@
 import { outfitFormulaSchema, type OutfitFormula } from '@/schemas/formula'
 import { CAPSULE_FORMULAS } from './formulas-capsule'
 import { REFERENCE_FORMULAS } from './formulas-reference'
+import { SEASON_FORMULAS } from './formulas-seasons'
 
 /**
  * Biblioteca de fórmulas de look.
@@ -530,7 +531,7 @@ function ajustarClima(formulas: OutfitFormula[]): OutfitFormula[] {
 export const OUTFIT_FORMULAS: OutfitFormula[] = ajustarClima([
   // As referências da usuária vêm primeiro: em empate, o motor reproduz o que
   // ela já disse que acha bonito, em vez de uma combinação só possível.
-  ...REFERENCE_FORMULAS,
+  ...REFERENCE_FORMULAS, ...SEASON_FORMULAS,
   ...WORK, ...CHURCH, ...TENNIS, ...SPORT, ...CASUAL, ...DINNER, ...EVENT, ...TRAVEL,
   ...CAPSULE_FORMULAS, ...UNIVERSAL,
 ])

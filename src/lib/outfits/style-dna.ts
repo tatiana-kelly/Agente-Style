@@ -122,6 +122,25 @@ export function avaliarPaleta(picks: Peca[]): {
 }
 
 /**
+ * As cores de cada estação, como as pranchas mostram.
+ *
+ * Preferência, nunca proibição: ninguém troca o armário inteiro a cada três
+ * meses, e um preto bem usado atravessa o ano.
+ */
+const CORES_DA_ESTACAO: Record<string, readonly string[]> = {
+  outono: ['caramelo', 'marrom', 'bege', 'creme', 'chocolate', 'terracota', 'ferrugem', 'oliva'],
+  inverno: ['preto', 'marinho', 'cinza', 'grafite', 'chumbo', 'vinho', 'bordô', 'marrom'],
+  primavera: ['rosa', 'rosa-claro', 'creme', 'bege', 'off-white', 'verde', 'azul', 'lavanda'],
+  verao: ['branco', 'off-white', 'cru', 'bege', 'azul', 'rosa', 'coral', 'areia'],
+}
+
+/** A peça está na cartela da estação corrente? */
+export function corDaEstacao(cor: string, estacao?: string): boolean {
+  if (!estacao) return false
+  return (CORES_DA_ESTACAO[estacao] ?? []).includes(normalizeColor(cor))
+}
+
+/**
  * Combinações que aparecem repetidas nas referências. Não são obrigatórias —
  * ganham prioridade quando o guarda-roupa permite.
  */

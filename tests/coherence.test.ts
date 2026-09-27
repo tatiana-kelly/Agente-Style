@@ -166,10 +166,10 @@ describe('as 3 opções precisam ser 3 opções', () => {
     }
   })
 
-  it('o acabamento não se repete entre as opções quando há alternativa', () => {
+  it('o calçado não se repete entre as opções quando há alternativa', () => {
     const r = generateCandidates(farto, ctx({ style: 'social' }), 3)
-    const bolsas = r.candidates.map((c) => c.items.find((i) => i.role === 'bag')?.item.id).filter(Boolean)
-    expect(new Set(bolsas).size).toBeGreaterThan(1)
+    const calcados = r.candidates.map((c) => c.items.find((i) => i.role === 'shoes')?.item.id).filter(Boolean)
+    expect(new Set(calcados).size).toBeGreaterThan(1)
   })
 
   it('guarda-roupa pequeno ainda devolve 3 opções, mesmo parecidas', () => {

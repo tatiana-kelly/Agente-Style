@@ -49,8 +49,9 @@ function buildPrompt(input: ImageDirectorInput): string {
   // descrição é genérica de propósito: não reproduz pessoa real nenhuma.
   const subject = hasPhoto
     ? 'Use a PRIMEIRA imagem de referência como a pessoa. Preserve exatamente rosto, tom de pele, cabelo, altura e proporções corporais.'
-    : `Modelo de moda feminina, adulta, silhueta esguia e alongada, cabelo comprido,
-postura ereta e pose natural de editorial, andando ou parada de frente.
+    : `Modelo de moda feminina, adulta, corpo atlético e magro, silhueta alongada
+e tonificada, cabelo comprido, postura ereta e pose natural de editorial,
+andando ou parada de frente.
 Pessoa fictícia: não reproduza nenhuma pessoa real.`
 
   const corrections = input.correctionNotes?.length

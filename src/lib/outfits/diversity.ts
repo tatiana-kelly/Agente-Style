@@ -23,12 +23,12 @@ export interface Peca {
 /**
  * O que não pode se repetir entre as opções.
  *
- * Roupa e terceira peça formam a silhueta: repetir calça ou blazer faz a
- * pessoa ver o mesmo look duas vezes. O calçado entra na regra de família e
- * pode repetir quando o armário não dá outra alternativa — é o que menos
- * chama atenção, e exigir sapato diferente custava a terceira opção inteira.
+ * Ela foi explícita: as três opções mudam TODAS as peças. Calçado incluído.
+ * A exigência cede só nas últimas passadas, quando o armário não tem como
+ * montar três looks disjuntos — aí é melhor repetir o sapato do que entregar
+ * duas opções.
  */
-const ROUPA: readonly OutfitRole[] = ['top', 'bottom', 'dress', 'outerwear']
+const ROUPA: readonly OutfitRole[] = ['top', 'bottom', 'dress', 'outerwear', 'shoes']
 
 const TERCEIRAS: Record<string, string> = {
   blazer: 'blazer', colete: 'colete', cardiga: 'casaquinho',
