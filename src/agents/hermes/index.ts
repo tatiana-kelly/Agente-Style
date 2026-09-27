@@ -128,6 +128,12 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       }
     }
 
+    // O que ela pediu no texto entra mesmo contra o clima; o resto, que fica
+    // travado só para o look não ser sorteado de novo, passa pelo gate.
+    const pedidasNoTexto = request.instruction?.trim()
+      ? parseRefinement(request.instruction, items).includeIds
+      : []
+
     const engineCtx: EngineContext = {
       style: intent.style,
       occasion: intent.occasion,
@@ -140,6 +146,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       modestyLevel: intent.modestyLevel,
       preferenceWeights,
       lockedItemIds,
+      lockedExplicitIds: pedidasNoTexto,
       excludeIds,
       novelty: intent.novelty,
       recentSignatures,

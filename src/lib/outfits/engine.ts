@@ -25,6 +25,12 @@ export interface EngineContext {
   season?: string
   /** Clima do dia: decide fórmula, camada e calçado. */
   clima?: 'calor' | 'ameno' | 'frio'
+  /**
+   * Peças que a pessoa pediu com todas as letras ("inclua o blazer").
+   * Pedido explícito vence o clima; travar o resto do look para não sortear
+   * tudo de novo, não.
+   */
+  lockedExplicitIds?: string[]
   formalityOverride?: [number, number]
   favoriteColors: string[]
   avoidColors: string[]
@@ -158,7 +164,15 @@ function buildFromFormula(
   tier: number,
   rolesPresent: Set<OutfitRole>,
 ): OutfitCandidate[] {
-  const locked = items.filter((i) => ctx.lockedItemIds.includes(i.id))
+  // Travada por conveniência (botão "Trocar") ainda passa pelo clima; travada
+  // porque ela pediu, não. Sem isto, o blazer do look anterior voltava sozinho
+  // depois de ela mudar o clima para calor.
+  const explicitas = new Set(ctx.lockedExplicitIds ?? [])
+  const locked = items.filter(
+    (i) =>
+      ctx.lockedItemIds.includes(i.id) &&
+      (explicitas.has(i.id) || pecaCombinaComClima(i, ctx.clima)),
+  )
   const lockedByRole = new Map(locked.map((i) => [i.category as OutfitRole, i]))
 
   let partials: Array<{ picks: Array<{ item: WardrobeItem; role: OutfitRole; slotAffinity: number }>; used: Set<string> }> = [
@@ -380,27 +394,41 @@ const DE_CALOR = ['shorts', 'bermuda', 'top-esportivo', 'regata']
 /** Colete é sobreposição sem manga: é a única que sobrevive ao calor. */
 const SOBREPOSICAO_DE_CALOR = ['colete']
 
+/**
+ * A peça, sozinha, combina com o clima?
+ *
+ * Esta pergunta não depende de fórmula nem de tier: casaco em 35 graus está
+ * errado mesmo quando o motor está na rede de segurança. Por isso ela vale
+ * SEMPRE — ao contrário da regra de camadas, que é de composição.
+ */
+export function pecaCombinaComClima(item: WardrobeItem, clima: EngineContext['clima']): boolean {
+  if (!clima) return true
+  if (clima === 'calor') {
+    if (PESADAS.includes(item.subcategory)) return false
+    // Sobreposição no calor, só colete — sem manga.
+    return item.category !== 'outerwear' || SOBREPOSICAO_DE_CALOR.includes(item.subcategory)
+  }
+  if (clima === 'frio') return !['chinelo', 'sandalia'].includes(item.subcategory)
+  return true
+}
+
 function climaOk(
   picks: Array<{ item: WardrobeItem; role: OutfitRole }>,
   clima: EngineContext['clima'],
   tier: number,
 ): boolean {
-  if (!clima || tier >= 4) return true
+  if (!clima) return true
 
-  if (clima === 'calor') {
-    if (picks.some((p) => PESADAS.includes(p.item.subcategory))) return false
-    // Blazer e casaquinho em 35 graus é o erro que ela viu na tela: escolheu
-    // calor e recebeu look de frio. Sobreposição no calor, só colete.
-    return !picks.some(
-      (p) => p.role === 'outerwear' && !SOBREPOSICAO_DE_CALOR.includes(p.item.subcategory),
-    )
-  }
-  if (clima === 'frio') {
-    // Peça de calor no frio só passa quando há camada cobrindo o look.
+  // Peça a peça: vale em todos os tiers. Antes o tier 4 desligava o clima
+  // inteiro, e guarda-roupa pequeno recebia bota em dia de calor.
+  if (picks.some((p) => !pecaCombinaComClima(p.item, clima))) return false
+
+  // Regra de composição: essa sim cede na rede de segurança, porque é melhor
+  // um look sem camada do que nenhuma resposta.
+  if (clima === 'frio' && tier < 4) {
     const temCamada = picks.some((p) => p.role === 'outerwear')
     const temPecaDeCalor = picks.some((p) => DE_CALOR.includes(p.item.subcategory))
     if (temPecaDeCalor && !temCamada) return false
-    return !picks.some((p) => ['chinelo', 'sandalia'].includes(p.item.subcategory))
   }
   return true
 }

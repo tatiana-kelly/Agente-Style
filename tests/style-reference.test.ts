@@ -259,11 +259,51 @@ describe('clima escolhido vale mais que a fórmula', () => {
     for (const occasion of contextos) {
       const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion, clima: 'frio', style: 'moderno' }), 3)
       for (const c of r.candidates) {
-        if (c.tier > 3) continue
         const subs = c.items.map((i) => i.item.subcategory)
+        // Peça a peça o clima vale em qualquer tier — inclusive na rede de segurança.
         expect(subs).not.toContain('sandalia')
+        if (c.tier > 3) continue
         if (subs.includes('shorts')) expect(c.items.some((i) => i.role === 'outerwear')).toBe(true)
       }
     }
+  })
+})
+
+describe('nada fura o clima — nem peça travada, nem rede de segurança', () => {
+  const soBota = GUARDA_ROUPA.filter((i) =>
+    ['camiseta-branca', 'jeans', 'bota-preta', 'bolsa-preta'].includes(i.id),
+  )
+
+  it('guarda-roupa pobre no calor não devolve bota mesmo caindo no tier 4', () => {
+    const r = generateCandidates(soBota, ctx({ occasion: 'passeio', clima: 'calor', style: 'casual' }), 3)
+    for (const c of r.candidates) {
+      expect(c.items.map((i) => i.item.subcategory)).not.toContain('bota')
+    }
+  })
+
+  it('peça travada que contradiz o clima é recusada pelo motor', () => {
+    const r = generateCandidates(
+      GUARDA_ROUPA,
+      ctx({ occasion: 'trabalho', clima: 'calor', style: 'moderno', lockedItemIds: ['blazer-preto'] }),
+      3,
+    )
+    for (const c of r.candidates) {
+      const sobreposicao = c.items.find((i) => i.role === 'outerwear')
+      if (sobreposicao) expect(sobreposicao.item.subcategory).toBe('colete')
+    }
+  })
+})
+
+describe('pedido explícito vence o clima', () => {
+  it('blazer pedido com todas as letras entra mesmo no calor', () => {
+    const r = generateCandidates(
+      GUARDA_ROUPA,
+      ctx({
+        occasion: 'trabalho', clima: 'calor', style: 'moderno',
+        lockedItemIds: ['blazer-preto'], lockedExplicitIds: ['blazer-preto'],
+      }),
+      3,
+    )
+    expect(r.candidates.some((c) => c.items.some((i) => i.item.id === 'blazer-preto'))).toBe(true)
   })
 })
