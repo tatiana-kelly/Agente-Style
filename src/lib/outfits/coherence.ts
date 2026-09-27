@@ -2,7 +2,7 @@ import type { WardrobeItem } from '@/schemas/wardrobe'
 import type { OutfitRole } from '@/schemas/outfit'
 import type { OutfitFormula } from '@/schemas/formula'
 import { colorCompatibility } from './color-engine'
-import { isNeutral } from '@/lib/wardrobe/colors'
+import { classificarCor } from './style-dna'
 
 /**
  * Regras de composição — o que um consultor de imagem corrigiria no look.
@@ -26,7 +26,7 @@ export interface Peca {
 const NUCLEO: readonly OutfitRole[] = ['top', 'bottom', 'dress', 'outerwear', 'shoes']
 
 export interface RegraQuebrada {
-  regra: 'formalidade' | 'cor' | 'calcado' | 'acessorio'
+  regra: 'formalidade' | 'cor' | 'calcado' | 'acessorio' | 'terceira-peca'
   motivo: string
 }
 
@@ -45,7 +45,9 @@ export function amplitudeFormalidade(picks: Peca[]): number {
 export function coresFortes(picks: Peca[]): string[] {
   const cores = nucleoDoLook(picks)
     .map((p) => p.item.color)
-    .filter((c) => c && !isNeutral(c))
+    // Jeans, caramelo e nude são base nas referências dela, não ponto de cor:
+    // a classificação do Style DNA é a fonte única.
+    .filter((c) => c && classificarCor(c) !== 'neutro')
   return [...new Set(cores.map((c) => c.trim().toLowerCase()))]
 }
 
@@ -56,13 +58,18 @@ export function coresFortes(picks: Peca[]): string[] {
 export function misturaAutorizada(formula: OutfitFormula): boolean {
   const slotCalcado = [...formula.required_roles, ...formula.optional_roles].find((s) => s.role === 'shoes')
   const aceitaTenis = Boolean(slotCalcado?.archetypes.some((a) => a === 'sneakers' || a === 'tennis_shoes'))
-  return aceitaTenis && formula.formality[1] >= 6
+  // A fórmula precisa ser ESTREITA: a curinga aceita formalidade 0 a 10 e,
+  // com isso, desligava a regra de calçado justamente nos tiers bons —
+  // sapatilha social com camiseta e jeans saía em primeiro lugar.
+  const estreita = formula.formality[1] - formula.formality[0] <= 3
+  return aceitaTenis && formula.formality[1] >= 6 && estreita
 }
 
 export interface OpcoesCoerencia {
   /** Camada da busca: quanto mais alta, mais o motor precisa aceitar. */
   tier: number
   formula: OutfitFormula
+  clima?: 'calor' | 'ameno' | 'frio'
 }
 
 /**
@@ -112,7 +119,13 @@ export function avaliarCoerencia(picks: Peca[], opts: OpcoesCoerencia): RegraQue
     }
   }
 
-  // 4. Acabamento, não vitrine: acessório demais tira o foco da roupa.
+  // 4. Frio pede camada. Sem isto, "básico inteligente" saía de camiseta de
+  //    manga curta em dia frio — a regra antiga só olhava short e regata.
+  if (opts.clima === 'frio' && tier <= 2 && !picks.some((p) => p.role === 'outerwear')) {
+    quebras.push({ regra: 'terceira-peca', motivo: 'Dia frio sem nenhuma camada por cima.' })
+  }
+
+  // 5. Acabamento, não vitrine: acessório demais tira o foco da roupa.
   const acessorios = picks.filter((p) => p.role === 'accessory')
   if (acessorios.length > MAX_ACESSORIOS) {
     quebras.push({ regra: 'acessorio', motivo: 'Acessórios demais para um look só.' })

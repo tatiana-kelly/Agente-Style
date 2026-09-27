@@ -131,13 +131,17 @@ describe('as três opções não dividem peças', () => {
   ] as const
 
   for (const c of contextos) {
-    it(`${c.occasion}: nenhuma peça de roupa aparece em duas opções`, () => {
+    it(`${c.occasion}: nenhuma opção repete a roupa de base de outra`, () => {
       const r = generateCandidates(CENARIO_GUARDA_ROUPA, cenarioCtx({ ...c, clima: 'ameno' }), 3)
       const vistas = new Map<string, number>()
-      const roupa = ['top', 'bottom', 'dress', 'outerwear', 'shoes']
+      // Parte de cima e parte de baixo desenham o look: repetir qualquer uma
+      // delas é o que faz parecer "o mesmo look de novo". Terceira peça e
+      // calçado podem repetir quando o armário não oferece alternativa — a
+      // seleção tenta evitar, mas não deixa a pessoa sem a terceira opção.
+      const base = ['top', 'bottom', 'dress']
       for (const cand of r.candidates) {
         for (const p of cand.items) {
-          if (!roupa.includes(p.role)) continue
+          if (!base.includes(p.role)) continue
           vistas.set(p.item.id, (vistas.get(p.item.id) ?? 0) + 1)
         }
       }

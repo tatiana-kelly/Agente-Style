@@ -74,7 +74,7 @@ export const STYLE_RULES: Record<Style, StyleRule> = {
   viagem: {
     formality: [1, 6], idealFormality: 3.5,
     requiredRoles: ['top', 'bottom', 'shoes'], optionalRoles: ['outerwear', 'accessory', 'bag'],
-    preferredSportTypes: [], forbiddenSubcategories: ['salto', 'joia'],
+    preferredSportTypes: [], forbiddenSubcategories: ['salto', 'joia', 'bijuteria', 'brinco', 'colar', 'anel', 'pulseira'],
     preferredSubcategories: { shoes: ['tenis', 'sapatilha'], outerwear: ['jaqueta', 'corta-vento'], bag: ['mochila'] },
     defaultOccasion: 'viagem',
   },

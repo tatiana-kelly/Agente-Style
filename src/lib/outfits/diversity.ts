@@ -20,8 +20,15 @@ export interface Peca {
   slotAffinity: number
 }
 
-/** O que conta como roupa para efeito de "não repetir peça entre as opções". */
-const ROUPA: readonly OutfitRole[] = ['top', 'bottom', 'dress', 'outerwear', 'shoes']
+/**
+ * O que não pode se repetir entre as opções.
+ *
+ * Roupa e terceira peça formam a silhueta: repetir calça ou blazer faz a
+ * pessoa ver o mesmo look duas vezes. O calçado entra na regra de família e
+ * pode repetir quando o armário não dá outra alternativa — é o que menos
+ * chama atenção, e exigir sapato diferente custava a terceira opção inteira.
+ */
+const ROUPA: readonly OutfitRole[] = ['top', 'bottom', 'dress', 'outerwear']
 
 const TERCEIRAS: Record<string, string> = {
   blazer: 'blazer', colete: 'colete', cardiga: 'casaquinho',

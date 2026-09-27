@@ -49,6 +49,7 @@ export function AddItemForm() {
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
   const foto = useRef<LoadedPhoto | null>(null)
+  const fotoOrigemRef = useRef<string | null>(null)
 
   const [step, setStep] = useState<Step>('capture')
   const [preview, setPreview] = useState<string | null>(null)
@@ -67,6 +68,8 @@ export function AddItemForm() {
     try {
       const carregada = await loadPhoto(file)
       foto.current = carregada
+      // Foto nova, referência nova: a anterior valia para o lote anterior.
+      fotoOrigemRef.current = null
 
       // Para a IA: resolução suficiente para caixas precisas, sem estourar o
       // limite de requisição. O recorte, depois, sai da foto em resolução cheia.
@@ -153,15 +156,22 @@ export function AddItemForm() {
     setError(null)
 
     try {
-      // A foto do lote é guardada uma vez; cada peça aponta para ela.
-      setProgresso('Guardando a foto original…')
-      const origem = await fetch('/api/wardrobe/source-photo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: toDataUrl(carregada, 2048, 0.85) }),
-      })
-      const origemPayload = await origem.json()
-      if (!origem.ok) throw new Error(origemPayload.error ?? 'Falha ao guardar a foto original.')
+      // A foto do lote é guardada uma vez; cada peça aponta para ela. No
+      // "tentar de novo" ela NÃO é reenviada: antes cada tentativa deixava
+      // outra cópia da mesma foto no armazenamento.
+      let refOrigem = fotoOrigemRef.current
+      if (!refOrigem) {
+        setProgresso('Guardando a foto original…')
+        const origem = await fetch('/api/wardrobe/source-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: toDataUrl(carregada, 2048, 0.85) }),
+        })
+        const origemPayload = await origem.json()
+        if (!origem.ok) throw new Error(origemPayload.error ?? 'Falha ao guardar a foto original.')
+        refOrigem = origemPayload.ref
+        fotoOrigemRef.current = refOrigem
+      }
       const loteId = crypto.randomUUID()
 
       await emLotes(
@@ -192,7 +202,7 @@ export function AddItemForm() {
                 metadata: {
                   origem: 'lote',
                   lote_id: loteId,
-                  foto_origem: origemPayload.ref,
+                  foto_origem: refOrigem,
                   caixa: p.caixaUsada,
                   caixa_ia: p.box,
                   posicao: p.position,

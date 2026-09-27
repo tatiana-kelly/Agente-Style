@@ -3,7 +3,8 @@ import type { NoveltyLevel, OutfitRole, Style } from '@/schemas/outfit'
 import type { OutfitFormula, FormulaSlot } from '@/schemas/formula'
 import { OUTFIT_FORMULAS } from '@/data/outfit-formulas'
 import { matchesSlot, slotAffinity } from './archetypes'
-import { avaliarCoerencia, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
+import { avaliarCoerencia, nucleoDoLook, penalidadeRepeticao, MAX_ACESSORIOS } from './coherence'
+import { classificarCor } from './style-dna'
 import { normalizeColor } from '@/lib/wardrobe/colors'
 import { afinidadeComReferencias, avaliarPaleta } from './style-dna'
 import { comparavel, limitarPorFormula, selecionarDiversos } from './diversity'
@@ -122,19 +123,68 @@ interface SlotPick {
   affinity: number
 }
 
+/**
+ * Quanto esta peça serve à COR que a fórmula pede e ao que já está escolhido.
+ *
+ * Sem isto, todas as camisas empatavam em afinidade e o desempate virava a
+ * ordem do banco: "All Black" nunca via a camisa preta, e "Neutros
+ * Sofisticados" saía com camisa verde. Nas referências a cor é a decisão do
+ * look, não o critério de desempate.
+ */
+function valorDeCor(
+  item: WardrobeItem,
+  formula: OutfitFormula,
+  jaEscolhidas: Array<{ item: WardrobeItem }>,
+): number {
+  let valor = 0
+
+  if (formula.palette_lock === 'black') {
+    valor += normalizeColor(item.color) === 'preto' ? 0.6 : -0.6
+  } else if (formula.palette_lock === 'monochrome' && jaEscolhidas.length > 0) {
+    const relacao = colorRelation(jaEscolhidas[0].item.color, item.color)
+    valor += relacao === 'MONOCHROMATIC' || relacao === 'TONAL' ? 0.5 : -0.5
+  }
+
+  if (jaEscolhidas.length > 0) {
+    const media =
+      jaEscolhidas.reduce((s, p) => s + colorCompatibility(p.item.color, item.color), 0) /
+      jaEscolhidas.length
+    valor += (media / 3) * 0.25
+  }
+
+  // Base neutra é o que sustenta as referências dela.
+  if (classificarCor(item.color) === 'neutro') valor += 0.15
+
+  // Peça da estação corrente ganha um empurrão — sem virar filtro, senão
+  // guarda-roupa pequeno trava.
+  if (ctxSeasonBonus(item)) valor += 0.05
+
+  return valor
+}
+
+let estacaoAtual: string | undefined
+function ctxSeasonBonus(item: WardrobeItem): boolean {
+  return Boolean(estacaoAtual && item.season.includes(estacaoAtual as never))
+}
+
 function candidatesForSlot(
   items: WardrobeItem[],
   slot: FormulaSlot,
   ctx: EngineContext,
   tier: number,
   used: Set<string>,
+  formula?: OutfitFormula,
+  jaEscolhidas: Array<{ item: WardrobeItem }> = [],
 ): SlotPick[] {
   const picks: SlotPick[] = []
+  estacaoAtual = ctx.season
 
   for (const item of items) {
     if (used.has(item.id)) continue
     if ((item.category as OutfitRole) !== slot.role) continue
     if (!isUsable(item, ctx, tier)) continue
+    // Peça que briga com o clima não entra nem como opcional.
+    if (!pecaCombinaComClima(item, ctx.clima) && !(ctx.lockedExplicitIds ?? []).includes(item.id)) continue
 
     const affinity = slotAffinity(item, slot.archetypes)
     // Tier 1 e 2 exigem o arquétipo; a partir do Tier 3 qualquer peça do papel serve.
@@ -144,15 +194,16 @@ function candidatesForSlot(
     picks.push({ item, affinity: affinity || 0.25 })
   }
 
-  // Empate de afinidade era sempre resolvido pela mesma peça: a repetida cai
-  // na ordenação para o guarda-roupa inteiro circular.
-  return picks
-    .sort(
-      (a, b) =>
-        b.affinity - penalidadeRepeticao(b.item, ctx.recentItemIds) -
-        (a.affinity - penalidadeRepeticao(a.item, ctx.recentItemIds)),
-    )
-    .slice(0, 5)
+  const nota = (p: SlotPick) =>
+    p.affinity -
+    penalidadeRepeticao(p.item, ctx.recentItemIds) +
+    (formula ? valorDeCor(p.item, formula, jaEscolhidas) : 0)
+
+  // Fórmula definida por paleta precisa enxergar mais peças antes de decidir:
+  // com 5 candidatos por papel, as pretas ficavam fora da lista.
+  const limite = formula?.palette_lock ? 12 : 5
+
+  return picks.sort((a, b) => nota(b) - nota(a)).slice(0, limite)
 }
 
 // ─────────────────────────────────────────────────────────────── construção
@@ -187,7 +238,7 @@ function buildFromFormula(
     for (const partial of partials) {
       const options = lockedItem
         ? [{ item: lockedItem, affinity: 1 }]
-        : candidatesForSlot(items, slot, ctx, tier, partial.used)
+        : candidatesForSlot(items, slot, ctx, tier, partial.used, formula, partial.picks)
 
       if (options.length === 0) {
         // Duas causas diferentes, tratadas de forma diferente — era aqui que
@@ -205,7 +256,8 @@ function buildFromFormula(
         continue
       }
 
-      for (const option of options.slice(0, 3)) {
+      // Fórmula de paleta testa mais alternativas: é nela que a cor decide.
+      for (const option of options.slice(0, formula.palette_lock ? 5 : 3)) {
         const used = new Set(partial.used)
         used.add(option.item.id)
         next.push({
@@ -227,20 +279,48 @@ function buildFromFormula(
   // Look montado ainda não é look bom: aqui entram as regras de composição.
   // Reprovar tudo neste tier é de propósito — o tier seguinte afrouxa, e vale
   // mais tentar de novo do que entregar blusa social com tênis.
-  // Portões, na ordem: composição, cor e clima. Look que não passa não é
-  // mostrado — a pessoa não deveria precisar descartar look feio na mão.
-  const coerentes = complete.filter(
-    (p) =>
-      avaliarCoerencia(p.picks, { tier, formula }).length === 0 &&
-      (tier >= 4 || avaliarPaleta(p.picks).aprovada) &&
-      travaDeCorOk(p.picks, formula) &&
-      climaOk(p.picks, ctx.clima, tier),
+  //
+  // Os portões rodam sobre o look COMPLETO, com terceira peça e acabamento:
+  // antes eles olhavam só os papéis obrigatórios, e um "All Black" podia
+  // ganhar blazer branco depois de aprovado.
+  const exigeSobreposicao = formula.required_roles.some((sl) => sl.role === 'outerwear')
+
+  // Com e sem terceira peça viram candidatos SEPARADOS.
+  //
+  // Garantir a terceira peça sempre fez todo look sair com blazer — e aí as
+  // três opções voltaram a ter a mesma estrutura. Oferecendo as duas versões,
+  // quem decide é o ranking (que prefere o look completo) e a diversidade
+  // (que prefere estruturas diferentes entre as opções).
+  const montados = complete.flatMap((p) => {
+    const completo = garantirTravadas(
+      addOptional(p.picks, items, formula, ctx, tier, p.used),
+      locked,
+    )
+    const variantes = [completo]
+
+    // A versão sem terceira peça não pode descartar o que ela travou.
+    const travadas = new Set(locked.map((i) => i.id))
+    const terceiraTravada = completo.some((x) => x.role === 'outerwear' && travadas.has(x.item.id))
+    if (!exigeSobreposicao && !terceiraTravada && completo.some((x) => x.role === 'outerwear')) {
+      const semTerceira = completo.filter((x) => x.role !== 'outerwear')
+      if (coversBody(semTerceira)) variantes.push(semTerceira)
+    }
+
+    return variantes.map((withExtras) => ({ ...p, withExtras }))
+  })
+
+  const coerentes = montados.filter(
+    ({ withExtras }) =>
+      avaliarCoerencia(withExtras, { tier, formula, clima: ctx.clima }).length === 0 &&
+      paletaDaFormulaOk(withExtras, formula, tier) &&
+      (tier >= 4 || avaliarPaleta(withExtras).aprovada) &&
+      travaDeCorOk(withExtras, formula) &&
+      climaOk(withExtras, ctx.clima, tier, explicitas),
   )
   if (coerentes.length === 0) return []
 
   return coerentes.map((p) => {
-    let withExtras = addOptional(p.picks, items, formula, ctx, tier, p.used)
-    withExtras = garantirTravadas(withExtras, locked)
+    const withExtras = p.withExtras
     const palette = analyzePalette(
       withExtras.filter((x) => !['accessory', 'bag'].includes(x.role)).map((x) => x.item.color),
     )
@@ -271,6 +351,18 @@ const ACESSORIO_PADRAO: FormulaSlot = {
   archetypes: ['jewelry', 'watch', 'belt', 'sunglasses', 'visor', 'cap'],
 }
 
+/**
+ * Terceira peça por padrão.
+ *
+ * As referências são inequívocas: é a terceira peça que separa roupa de look.
+ * Antes o motor garantia acessório e bolsa por padrão, mas não ela — a
+ * prioridade estava invertida, e 6 em cada 10 looks saíam sem camada nenhuma.
+ */
+const SOBREPOSICAO_PADRAO: FormulaSlot = {
+  role: 'outerwear',
+  archetypes: ['blazer', 'vest', 'cardigan', 'jacket', 'denim_jacket', 'coat'],
+}
+
 /** Mesmo raciocínio para bolsa: quase todo look sai de casa com uma. */
 const BOLSA_PADRAO: FormulaSlot = {
   role: 'bag',
@@ -289,16 +381,26 @@ function addOptional(
   const taken = new Set(used)
 
   const slots = [...formula.optional_roles]
+  // Estrutura antes do acabamento: a terceira peça é o que separa roupa de
+  // look, e era a única que não tinha slot padrão. No calor, `candidatesForSlot`
+  // já barra tudo que não seja colete.
+  const temSobreposicao =
+    base.some((p) => p.role === 'outerwear') ||
+    formula.required_roles.some((sl) => sl.role === 'outerwear')
+  if (!temSobreposicao && !slots.some((sl) => sl.role === 'outerwear')) {
+    slots.unshift(SOBREPOSICAO_PADRAO)
+  }
   // Sem acessório na fórmula, usa o padrão: a pessoa quer o look terminado.
   if (!slots.some((s) => s.role === 'accessory')) slots.push(ACESSORIO_PADRAO)
   if (!slots.some((s) => s.role === 'bag')) slots.push(BOLSA_PADRAO)
 
   for (const slot of slots) {
-    // Terceira peça é styling, não agasalho: nas referências o blazer aparece
-    // o ano inteiro. Só não entra quando faz calor — aí vira desconforto.
-    if (slot.role === 'outerwear' && ctx.clima === 'calor') continue
 
-    const limite = MAX_POR_PAPEL[slot.role] ?? 1
+    // Um acessório termina o look; o segundo só quando a fórmula pede — e
+    // ainda assim precisa acrescentar algo, não repetir o primeiro.
+    const formulaPedeAcessorio = formula.optional_roles.some((s) => s.role === 'accessory')
+    const limite =
+      slot.role === 'accessory' ? (formulaPedeAcessorio ? MAX_ACESSORIOS : 1) : (MAX_POR_PAPEL[slot.role] ?? 1)
     const familiasUsadas = new Set<string>()
     let adicionados = 0
 
@@ -312,12 +414,17 @@ function addOptional(
 
     for (const candidato of ordenados) {
       if (adicionados >= limite) break
-      // Limiar mais baixo que o original (0.5): acessório neutro quase sempre
-      // funciona, e sem isto o look voltava sem brinco, cinto nem bolsa.
-      if (candidato.value < 0.4) continue
+      // Acabamento precisa merecer o lugar: com limiar baixo, todo acessório
+      // neutro entrava e os três looks saíam com o mesmo par dourado.
+      if (candidato.value < 0.6) continue
       // Não empilhar três colares: uma peça por família de acessório.
       const familia = familiaDoAcessorio(candidato.item.subcategory)
       if (familiasUsadas.has(familia)) continue
+      // O segundo acessório tem de somar: família E cor diferentes do primeiro.
+      if (slot.role === 'accessory' && adicionados > 0) {
+        const jaTem = result.filter((r) => r.role === 'accessory')
+        if (jaTem.some((r) => normalizeColor(r.item.color) === normalizeColor(candidato.item.color))) continue
+      }
 
       result.push({ item: candidato.item, role: slot.role, slotAffinity: candidato.affinity })
       taken.add(candidato.item.id)
@@ -356,6 +463,25 @@ function familiaDoAcessorio(subcategoria: string): string {
   if (['anel', 'pulseira', 'relogio'].includes(subcategoria)) return 'maos'
   if (['bone', 'viseira', 'chapeu'].includes(subcategoria)) return 'cabeca'
   return subcategoria
+}
+
+/**
+ * Fórmula que declara padrão de cor precisa cumpri-lo.
+ *
+ * `color_patterns` era só bônus no ranking: "Neutros Sofisticados" saía com
+ * camisa verde. Em tier 1 e 2 vira porteiro; depois volta a ser preferência,
+ * porque rede de segurança não pode recusar look completo.
+ */
+function paletaDaFormulaOk(
+  picks: Array<{ item: WardrobeItem; role: OutfitRole }>,
+  formula: OutfitFormula,
+  tier: number,
+): boolean {
+  if (tier > 2 || formula.color_patterns.length === 0) return true
+  const paleta = analyzePalette(
+    picks.filter((p) => !['accessory', 'bag'].includes(p.role)).map((p) => p.item.color),
+  )
+  return formula.color_patterns.includes(paleta.dominant)
 }
 
 /**
@@ -416,12 +542,16 @@ function climaOk(
   picks: Array<{ item: WardrobeItem; role: OutfitRole }>,
   clima: EngineContext['clima'],
   tier: number,
+  /** O que ela pediu com todas as letras não é julgado pelo clima. */
+  explicitas: ReadonlySet<string> = new Set(),
 ): boolean {
   if (!clima) return true
 
   // Peça a peça: vale em todos os tiers. Antes o tier 4 desligava o clima
   // inteiro, e guarda-roupa pequeno recebia bota em dia de calor.
-  if (picks.some((p) => !pecaCombinaComClima(p.item, clima))) return false
+  if (picks.some((p) => !explicitas.has(p.item.id) && !pecaCombinaComClima(p.item, clima))) {
+    return false
+  }
 
   // Regra de composição: essa sim cede na rede de segurança, porque é melhor
   // um look sem camada do que nenhuma resposta.
@@ -455,18 +585,22 @@ function score(
   const patternBonus = formula.color_patterns.includes(palette.dominant) ? 0.12 : 0
   const dna = avaliarPaleta(picks)
   const color_match = clamp01(
-    (palette.score + patternBonus) * 0.5 + dna.nota * 0.3 + afinidadeComReferencias(picks) * 0.2,
+    (palette.score + patternBonus) * 0.35 + dna.nota * 0.45 + afinidadeComReferencias(picks) * 0.2,
   )
 
-  const avgFormality = items.reduce((s, i) => s + i.formality, 0) / Math.max(items.length, 1)
-  const spread = items.length > 1 ? Math.max(...items.map((i) => i.formality)) - Math.min(...items.map((i) => i.formality)) : 0
+  // Formalidade se mede na roupa, não no acessório: a bijuteria f6 fazia um
+  // look básico parecer incoerente e entregava a vitória a outro look.
+  const nucleo = nucleoDoLook(picks).map((p) => p.item)
+  const base = nucleo.length > 0 ? nucleo : items
+  const avgFormality = base.reduce((s, i) => s + i.formality, 0) / Math.max(base.length, 1)
+  const spread = base.length > 1 ? Math.max(...base.map((i) => i.formality)) - Math.min(...base.map((i) => i.formality)) : 0
   const [fmin, fmax] = ctx.formalityOverride ?? formula.formality
   const target = (fmin + fmax) / 2
   const formality_match = clamp01(1 - Math.abs(avgFormality - target) / 5) * clamp01(1 - spread / 9)
 
   // Style gate: a fórmula que veio das referências dela vale mais que uma
   // fórmula genérica igualmente aplicável.
-  const bonusReferencia = formula.source_type === 'style-reference' ? 0.15 : 0
+  const bonusReferencia = formula.source_type === 'style-reference' ? 0.35 : 0
   const style_match = clamp01(
     bonusReferencia +
     (formula.style.includes(ctx.style) ? 0.6 : 0.25) +
@@ -561,7 +695,9 @@ export function generateCandidates(
   const ladder: Array<{ tier: number; formulas: OutfitFormula[] }> = [
     { tier: 1, formulas: byStyleAndOccasion },
     { tier: 2, formulas: byStyle },
-    { tier: 3, formulas: [...byStyle, ...universal] },
+    // A curinga fica fora dos tiers bons: ela aceita qualquer coisa e estava
+    // competindo — e ganhando — de fórmula de referência no tier 1.
+    { tier: 3, formulas: byStyle },
     { tier: 4, formulas: universal },
     { tier: 5, formulas: universal },
   ]
@@ -727,7 +863,7 @@ function diversify(ranked: OutfitCandidate[], count: number): OutfitCandidate[] 
 
   // O teto por fórmula evita que uma ideia domine o topo; alto o bastante para
   // ainda sobrar combinação sem nenhuma peça repetida quando ela existir.
-  return selecionarDiversos(limitarPorFormula(candidatos, 6), count)
+  return selecionarDiversos(limitarPorFormula(candidatos, 12), count)
 }
 
 function sameColor(a: string, b: string): boolean {
