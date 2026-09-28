@@ -145,6 +145,9 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       preferredArchetypes: [],
       modestyLevel: intent.modestyLevel,
       preferenceWeights,
+      // Semente nova por pedido: o mesmo compromisso, no mesmo clima, não
+      // pode devolver o mesmo trio de looks toda vez.
+      semente: Date.now(),
       lockedItemIds,
       lockedExplicitIds: pedidasNoTexto,
       excludeIds,

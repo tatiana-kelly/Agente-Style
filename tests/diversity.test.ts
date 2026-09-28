@@ -150,3 +150,55 @@ describe('as três opções não dividem peças', () => {
     })
   }
 })
+
+describe('criatividade entre gerações', () => {
+  const assinatura = (r: ReturnType<typeof generateCandidates>) =>
+    r.candidates
+      .map((c) => c.items.filter((i) => i.role !== 'accessory').map((i) => i.item.id).sort().join('+'))
+      .join(' || ')
+
+  it('montar o look de novo não devolve o mesmo trio', () => {
+    // A queixa dela: apertar de novo e ver as mesmas peças. A semente muda a
+    // cada pedido e faz o motor explorar outro canto do guarda-roupa.
+    const rodadas = [1, 2, 3].map((n) =>
+      assinatura(
+        generateCandidates(
+          CENARIO_GUARDA_ROUPA,
+          cenarioCtx({ style: 'trabalho', occasion: 'trabalho', clima: 'ameno', semente: n * 7919 }),
+          3,
+        ),
+      ),
+    )
+    expect(new Set(rodadas).size).toBeGreaterThan(1)
+  })
+
+  it('a mesma semente devolve o mesmo resultado — variação não é sorteio cego', () => {
+    const uma = () =>
+      assinatura(
+        generateCandidates(
+          CENARIO_GUARDA_ROUPA,
+          cenarioCtx({ style: 'trabalho', occasion: 'trabalho', clima: 'ameno', semente: 42 }),
+          3,
+        ),
+      )
+    expect(uma()).toBe(uma())
+  })
+
+  it('a variação não quebra a regra de peças diferentes entre as opções', () => {
+    for (const semente of [11, 222, 3333]) {
+      const r = generateCandidates(
+        CENARIO_GUARDA_ROUPA,
+        cenarioCtx({ style: 'trabalho', occasion: 'trabalho', clima: 'ameno', semente }),
+        3,
+      )
+      const vistas = new Map<string, number>()
+      for (const c of r.candidates) {
+        for (const p of c.items) {
+          if (!['top', 'bottom', 'dress'].includes(p.role)) continue
+          vistas.set(p.item.id, (vistas.get(p.item.id) ?? 0) + 1)
+        }
+      }
+      expect([...vistas.values()].filter((n) => n > 1)).toEqual([])
+    }
+  })
+})

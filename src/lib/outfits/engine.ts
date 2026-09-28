@@ -27,6 +27,12 @@ export interface EngineContext {
   /** Clima do dia: decide fórmula, camada e calçado. */
   clima?: 'calor' | 'ameno' | 'frio'
   /**
+   * Semente da geração. Duas chamadas com sementes diferentes exploram partes
+   * diferentes do guarda-roupa — é o que faz "Montar meu look" duas vezes
+   * seguidas devolver coisas diferentes em vez do mesmo trio.
+   */
+  semente?: number
+  /**
    * Peças que a pessoa pediu com todas as letras ("inclua o blazer").
    * Pedido explícito vence o clima; travar o resto do look para não sortear
    * tudo de novo, não.
@@ -166,6 +172,13 @@ function valorDeCor(
   return valor
 }
 
+/** Ruído estável: mesmo id + mesma semente dão sempre o mesmo valor, em 0..1. */
+function ruido(id: string, semente: number): number {
+  let h = semente | 0
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h ^ id.charCodeAt(i), 2654435761) >>> 0) % 1000003
+  return (h % 1000) / 1000
+}
+
 let estacaoAtual: string | undefined
 function ctxSeasonBonus(item: WardrobeItem): boolean {
   return Boolean(estacaoAtual && item.season.includes(estacaoAtual as never))
@@ -201,11 +214,16 @@ function candidatesForSlot(
   const nota = (p: SlotPick) =>
     p.affinity -
     penalidadeRepeticao(p.item, ctx.recentItemIds) +
-    (formula ? valorDeCor(p.item, formula, jaEscolhidas) : 0)
+    (formula ? valorDeCor(p.item, formula, jaEscolhidas) : 0) +
+    // Empate é a regra, não a exceção: com 22 calças elegíveis, dezenas
+    // empatam em afinidade e cor. Sem este desempate a ordem é sempre a
+    // mesma e o app parece ter cinco peças. A semente muda a cada geração,
+    // então "Montar meu look" de novo explora outro canto do armário.
+    ruido(p.item.id, ctx.semente ?? 0) * 0.12
 
-  // Fórmula definida por paleta precisa enxergar mais peças antes de decidir:
-  // com 5 candidatos por papel, as pretas ficavam fora da lista.
-  const limite = formula?.palette_lock ? 12 : 5
+  // Enxergar mais peças por papel: com 5, o motor decidia entre as mesmas
+  // cinco calças do guarda-roupa inteiro.
+  const limite = formula?.palette_lock ? 14 : 10
 
   return picks.sort((a, b) => nota(b) - nota(a)).slice(0, limite)
 }
@@ -261,7 +279,7 @@ function buildFromFormula(
       }
 
       // Fórmula de paleta testa mais alternativas: é nela que a cor decide.
-      for (const option of options.slice(0, formula.palette_lock ? 5 : 3)) {
+      for (const option of options.slice(0, formula.palette_lock ? 6 : 4)) {
         const used = new Set(partial.used)
         used.add(option.item.id)
         next.push({
