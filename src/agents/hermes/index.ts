@@ -2,8 +2,30 @@ import type { HermesRequest, HermesResponse } from '@/schemas/hermes'
 import type { Repository } from '@/services/repository'
 import type { OutfitProposal } from '@/agents/outfit-agent'
 import { resolveStyleIntent } from '@/agents/style-agent'
+import { interpretarPedido } from '@/agents/style-agent/nlu-openai'
 import { runWardrobeAgent } from '@/agents/wardrobe-agent'
 import { runOutfitAgent } from '@/agents/outfit-agent'
+import { runStylist } from '@/agents/stylist'
+import { runLookCritic } from '@/agents/look-critic'
+
+/**
+ * Quantos looks o motor entrega para a stylist escolher.
+ *
+ * Com três, não há escolha — e a IA só confirmaria a ordem do motor. Com uma
+ * dúzia, ela compara ideias diferentes e a conta continua barata: é uma
+ * chamada de texto, não de imagem.
+ */
+const CANDIDATOS_PARA_A_STYLIST = 12
+
+/** Estourar o teto não pode derrubar o look já montado: anota e segue. */
+function cobrar(budget: CostBudget, custo: number, operacao: string): void {
+  if (custo <= 0) return
+  try {
+    budget.charge(custo, operacao)
+  } catch (e) {
+    if (!(e instanceof BudgetExceededError)) throw e
+  }
+}
 import { faltantes, parseRefinement } from '@/agents/style-agent/refine'
 import type { EngineContext } from '@/lib/outfits/engine'
 import { runImageDirector } from '@/agents/image-director'
@@ -55,6 +77,12 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
     }
 
     // 2. Style Agent — interpreta a intenção
+    //
+    // O que ela escreveu vale mais que o que a tela marcou: "vou jantar em
+    // Campos do Jordão, está frio" define ocasião, clima e registro sozinho.
+    const entendido = await interpretarPedido(request.context ?? '')
+    cobrar(budget, entendido.custo, 'interpretacao')
+
     const intent = resolveStyleIntent({
       style: request.style,
       occasion: request.occasion,
@@ -62,7 +90,13 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       weather: request.weather,
       profile: styleProfile,
       novelty: request.novelty,
-      clima: request.clima,
+      // Clima escrito por ela ganha do botão: quem digita "está frio" acabou
+      // de dar a informação mais recente.
+      clima: entendido.clima ?? request.clima,
+      occasionSugerida: entendido.occasion,
+      styleSugerido: entendido.style,
+      formalidadePedida: entendido.formalidade,
+      conforto: entendido.conforto,
     })
 
     // 3. Wardrobe Agent — diagnostico do acervo disponivel
@@ -157,7 +191,51 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       recentFormulaIds,
     }
 
-    const outfit = runOutfitAgent(items, engineCtx, 3)
+    // O motor monta MUITO mais do que três: é entre esses candidatos — todos
+    // já aprovados nos portões de cor, clima e coerência — que a stylist da
+    // OpenAI escolhe. Código garante o verificável; ela escolhe o bonito.
+    const outfit = runOutfitAgent(items, engineCtx, CANDIDATOS_PARA_A_STYLIST)
+
+    const escolha = await runStylist({
+      pedido: request.context,
+      ocasiao: intent.occasion,
+      clima: intent.clima,
+      candidatos: [outfit.primary, ...outfit.alternatives].filter(Boolean) as OutfitProposal[],
+      perfil: styleProfile,
+      acervo: items,
+      quantidade: 3,
+    })
+    cobrar(budget, escolha.custo, 'stylist')
+
+    const todos = [outfit.primary, ...outfit.alternatives].filter(Boolean) as OutfitProposal[]
+    let escolhidos = escolha.escolhidos.map((i, pos) => ({
+      ...todos[i],
+      etiqueta: escolha.etiquetas[pos] ?? todos[i].etiqueta,
+      explanation: escolha.explicacoes[pos] ?? todos[i].explanation,
+    }))
+
+    // Segunda opinião antes de mostrar: o que o crítico reprovar é trocado
+    // pelo melhor candidato que sobrou. Um ciclo — dois já seria teimosia.
+    const critica = await runLookCritic(escolhidos)
+    cobrar(budget, critica.custo, 'look-critic')
+    const notasDaCritica: string[] = []
+
+    if (!critica.aprovado && critica.criticas.length > 0) {
+      const usados = new Set(escolhidos.map((e) => e.signature))
+      const reserva = todos.filter((c) => !usados.has(c.signature))
+
+      escolhidos = escolhidos.map((look, i) => {
+        const problema = critica.criticas.find((c) => c.indice === i)
+        if (!problema) return look
+        const substituto = reserva.shift()
+        if (!substituto) return look
+        notasDaCritica.push(`Troquei uma das opções: ${problema.problemas[0] ?? 'não convenceu na revisão'}.`)
+        return substituto
+      })
+    }
+
+    outfit.primary = escolhidos[0] ?? outfit.primary
+    outfit.alternatives = escolhidos.slice(1)
 
     if (!outfit.primary) {
       // Diagnostico acionavel em vez de "nao foi possivel" (§27).

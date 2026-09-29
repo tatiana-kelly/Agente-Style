@@ -336,3 +336,38 @@ describe('cartela e estrutura por estação', () => {
     }
   })
 })
+
+describe('casos da reestruturação do styling engine', () => {
+  const comCor = (cor: string, role: OutfitRole, sub: string, formality: number) =>
+    item({ id: `${sub}-${cor}`, name: `${sub} ${cor}`, category: role === 'dress' ? 'dress' : (role as never), subcategory: sub, color: cor, formality })
+
+  it('azul + vermelho + marrom é recusado pela paleta', () => {
+    const look = [
+      { role: 'top' as OutfitRole, slotAffinity: 1, item: comCor('azul', 'top', 'camisa', 5) },
+      { role: 'bottom' as OutfitRole, slotAffinity: 1, item: comCor('vermelho', 'bottom', 'calca', 5) },
+      { role: 'shoes' as OutfitRole, slotAffinity: 1, item: comCor('marrom', 'shoes', 'bota', 5) },
+    ]
+    expect(avaliarPaleta(look).aprovada).toBe(false)
+  })
+
+  it('short não aparece em dia frio, nem com jaqueta', () => {
+    const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion: 'viagem', clima: 'frio', style: 'viagem' }), 3)
+    for (const c of r.candidates) {
+      expect(c.items.map((i) => i.item.subcategory)).not.toContain('shorts')
+    }
+  })
+
+  it('clima quente não empilha camadas', () => {
+    const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion: 'passeio', clima: 'calor', style: 'casual' }), 3)
+    for (const c of r.candidates) {
+      const camadas = c.items.filter((i) => i.role === 'outerwear')
+      expect(camadas.length).toBeLessThanOrEqual(1)
+      for (const camada of camadas) expect(camada.item.subcategory).toBe('colete')
+    }
+  })
+
+  it('o motor entrega candidatos suficientes para a stylist escolher', () => {
+    const r = generateCandidates(GUARDA_ROUPA, ctx({ occasion: 'jantar', clima: 'ameno', style: 'jantar' }), 12)
+    expect(r.candidates.length).toBeGreaterThanOrEqual(6)
+  })
+})
