@@ -88,6 +88,11 @@ export function resolveStyleIntent(input: {
   profile?: StyleProfile | null
   novelty?: NoveltyLevel
   clima?: string
+  /** Vindos da leitura do texto livre pela OpenAI. */
+  occasionSugerida?: string
+  styleSugerido?: string
+  formalidadePedida?: [number, number]
+  conforto?: boolean
 }): StyleIntent {
   const context = input.context ?? ''
   const notes: string[] = []
@@ -95,9 +100,11 @@ export function resolveStyleIntent(input: {
   // A frase livre pode redefinir estilo e ocasiao: "vou a igreja" vale mais
   // que o estilo que veio marcado na tela.
   const understood = extractContext(context)
-  const occasion = input.occasion ?? understood.occasion
-  // Ordem: o que ela escreveu > o que a tela mandou > o que a ocasião pede.
-  const style = understood.style ?? input.style ?? estiloParaOcasiao(occasion)
+  // Ordem: o que ela escreveu (lido pela IA ou pela regex) > o que a tela
+  // mandou > o que a ocasião pede.
+  const occasion = input.occasionSugerida ?? understood.occasion ?? input.occasion
+  const style =
+    (input.styleSugerido as Style | undefined) ?? understood.style ?? input.style ?? estiloParaOcasiao(occasion)
 
   const rule = ruleFor(style)
   let [min, max] = formalityForContext(input.profile ?? null, style) ?? rule.formality
@@ -134,6 +141,15 @@ export function resolveStyleIntent(input: {
     if (weather.temperature >= 28) notes.push('Calor: evitar sobreposição.')
   }
   if (weather?.rain) notes.push('Chuva: evitar calçado aberto e tecido delicado.')
+
+  if (input.formalidadePedida) {
+    ;[min, max] = input.formalidadePedida
+    notes.push('Ajustei o nível de elegância ao que você pediu.')
+  }
+  if (input.conforto) {
+    min = Math.max(0, min - 1)
+    notes.push('Você pediu conforto: peças mais soltas ganham prioridade.')
+  }
 
   const novelty: NoveltyLevel = understood.wantsNovelty ? 'ousado' : (input.novelty ?? 'equilibrado')
   if (understood.wantsNovelty) notes.push('Você pediu algo diferente — fui menos óbvio na combinação.')

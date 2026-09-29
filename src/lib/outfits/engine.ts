@@ -566,7 +566,11 @@ export function pecaCombinaComClima(item: WardrobeItem, clima: EngineContext['cl
     // Sobreposição no calor, só colete — sem manga.
     return item.category !== 'outerwear' || SOBREPOSICAO_DE_CALOR.includes(item.subcategory)
   }
-  if (clima === 'frio') return !['chinelo', 'sandalia'].includes(item.subcategory)
+  if (clima === 'frio') {
+    // Short com jaqueta continua sendo short em dia frio — nas pranchas de
+    // inverno ele não aparece nenhuma vez. Perna de fora sai do inverno.
+    return !['chinelo', 'sandalia', 'shorts', 'bermuda', 'top-esportivo'].includes(item.subcategory)
+  }
   return true
 }
 
@@ -589,8 +593,8 @@ function climaOk(
   // um look sem camada do que nenhuma resposta.
   if (clima === 'frio' && tier < 4) {
     const temCamada = picks.some((p) => p.role === 'outerwear')
-    const temPecaDeCalor = picks.some((p) => DE_CALOR.includes(p.item.subcategory))
-    if (temPecaDeCalor && !temCamada) return false
+    const temPecaLeve = picks.some((p) => DE_CALOR.includes(p.item.subcategory))
+    if (temPecaLeve && !temCamada) return false
   }
   return true
 }
