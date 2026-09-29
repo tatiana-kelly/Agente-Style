@@ -21,8 +21,10 @@ export async function POST(request: Request, { params }: Params) {
 
     const body = await request.json().catch(() => ({}))
     const qualidade = body?.qualidade === 'previa' ? 'previa' : 'final'
+    const modo = body?.modo === 'try-on' ? 'try-on' : 'lookbook'
+    const variacao = Number.isFinite(body?.variacao) ? Number(body.variacao) : 0
 
-    const result = await renderLookImage({ repo, userId: user.id, outfitId: id, qualidade })
+    const result = await renderLookImage({ repo, userId: user.id, outfitId: id, qualidade, modo, variacao })
     if (!result.success) return ok({ error: result.error ?? 'Não consegui gerar a imagem.' }, 422)
 
     return ok({ imageUrl: result.imageUrl, costUsd: result.costUsd })

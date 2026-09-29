@@ -48,13 +48,17 @@ function structuralCheck(input: QualityControlInput): QualityControlOutput {
 
   if (!result.success) issues.push(result.error ?? 'Geração falhou sem detalhe.')
   if (result.success && !result.image_base64 && !result.image_url) issues.push('Resposta sem imagem utilizável.')
-  if (request.references.length === 0) issues.push('Nenhuma referência visual foi enviada ao modelo.')
+  // Sem referência visual não é falha: no modo lookbook a imagem nasce da
+  // descrição, e peça sem foto cadastrada é o caso comum de quem está começando.
+  const semReferencia = request.references.length === 0
+  if (semReferencia) issues.push('Sem foto das peças: usei a descrição para desenhar o look.')
 
   const hasPerson = request.references.some((r) => r.kind === 'person')
-  if (!hasPerson) issues.push('Sem foto da pessoa: a identidade não pôde ser preservada.')
+  if (!hasPerson) issues.push('Sem foto da pessoa: o look foi apresentado na modelo do app.')
 
-  const approved = result.success && issues.filter((i) => !i.startsWith('Sem foto')).length === 0
-  const score = approved ? (hasPerson ? 0.75 : 0.6) : 0
+  const bloqueios = issues.filter((i) => !i.startsWith('Sem foto'))
+  const approved = result.success && bloqueios.length === 0
+  const score = approved ? (hasPerson ? 0.75 : semReferencia ? 0.55 : 0.65) : 0
 
   return {
     approved,
@@ -67,10 +71,26 @@ function structuralCheck(input: QualityControlInput): QualityControlOutput {
   }
 }
 
-const VISION_SYSTEM = `Você audita imagens geradas de moda. Responda SOMENTE JSON:
-{"approved":boolean,"score":number(0..1),"issues":string[],"corrections":string[]}
-Reprove se: houver mais de uma pessoa; membros ou dedos deformados; peça de roupa que não estava na lista; cor de peça diferente da pedida; calçado cortado fora do enquadramento.
-"corrections" são instruções curtas e acionáveis para regerar.`
+const VISION_SYSTEM = `Você audita imagens geradas de moda, com olho de editor de moda.
+Responda SOMENTE JSON:
+{"approved":boolean,"score":number(0..1),"apresentacao":number(0..1),"issues":string[],"corrections":string[]}
+
+REPROVE (fidelidade — o look é o plano, a imagem só mostra):
+- mais de uma pessoa na cena;
+- membros, mãos ou dedos deformados;
+- peça de roupa que não estava na lista;
+- cor de peça diferente da pedida;
+- calçado cortado fora do enquadramento ou pés fora do quadro.
+
+AVALIE a apresentação em "apresentacao" (0..1), e reprove abaixo de 0,4:
+- pose rígida de catálogo: braços retos colados ao corpo, corpo de frente parado;
+- expressão artificial ou "cara de documento";
+- aparência de manequim de vitrine em vez de pessoa;
+- cenário que rouba a atenção da roupa;
+- luz estourada ou filtro que falseia a cor das peças.
+
+"corrections" são instruções curtas e acionáveis para regerar — incluindo pose e
+enquadramento quando o problema for de apresentação.`
 
 async function visionCheck(input: QualityControlInput): Promise<QualityControlOutput> {
   const client = new OpenAI({ apiKey: env.openaiKey })
@@ -102,18 +122,24 @@ async function visionCheck(input: QualityControlInput): Promise<QualityControlOu
   const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as {
     approved?: boolean
     score?: number
+    /** Nota de apresentação: pose, naturalidade, presença editorial. */
+    apresentacao?: number
     issues?: string[]
     corrections?: string[]
   }
 
   const usage = completion.usage
   const cost = estimateTextCost(usage?.prompt_tokens ?? 800, usage?.completion_tokens ?? 150)
-  const approved = parsed.approved ?? true
-  const issues = parsed.issues ?? []
+  const apresentacao = clamp01(parsed.apresentacao ?? 0.7)
+  // Fidelidade e apresentação reprovam por caminhos diferentes: a primeira é
+  // erro de conteúdo, a segunda é foto de catálogo — e as duas derrubam o look.
+  const approved = (parsed.approved ?? true) && apresentacao >= 0.4
+  const issues = [...(parsed.issues ?? [])]
+  if (apresentacao < 0.4) issues.push('A imagem ficou com cara de catálogo: pose e presença fracas.')
 
   return {
     approved,
-    score: clamp01(parsed.score ?? (approved ? 0.85 : 0.3)),
+    score: clamp01(((parsed.score ?? (approved ? 0.85 : 0.3)) + apresentacao) / 2),
     issues,
     retry: !approved && input.attempt < input.maxAttempts,
     correctionNotes: parsed.corrections ?? issues,

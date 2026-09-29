@@ -279,6 +279,10 @@ export async function renderLookImage(args: {
    * definitiva. 'final' é o acabamento do look que a pessoa salvou.
    */
   qualidade?: 'previa' | 'final'
+  /** 'lookbook' usa a modelo do app; 'try-on' usa a foto dela. */
+  modo?: 'lookbook' | 'try-on'
+  /** Índice da opção na tela: muda pose e enquadramento entre as três. */
+  variacao?: number
 }): Promise<{ success: boolean; imageUrl?: string; error?: string; costUsd: number }> {
   const { repo, userId, outfitId } = args
   const qualidade = args.qualidade ?? 'final'
@@ -286,10 +290,12 @@ export async function renderLookImage(args: {
 
   const existente = await repo.getGeneratedLook(userId, outfitId)
   if (existente?.image_url) {
-    const jaEFinal = (existente.generation_metadata as { qualidade?: string } | null)?.qualidade !== 'previa'
+    const meta = existente.generation_metadata as { qualidade?: string; modo?: string } | null
+    const mesmoModo = (meta?.modo ?? 'lookbook') === (args.modo ?? 'lookbook')
+    const jaEFinal = meta?.qualidade !== 'previa'
     // Reaproveitar em vez de pagar de novo (PRP §35). A exceção é a prévia
     // quando a pessoa salva o look: aí vale refazer com acabamento.
-    if (jaEFinal || qualidade === 'previa') {
+    if (mesmoModo && (jaEFinal || qualidade === 'previa')) {
       return { success: true, imageUrl: existente.image_url, costUsd: 0 }
     }
   }
@@ -324,6 +330,8 @@ export async function renderLookImage(args: {
     budget,
     repo,
     qualidade,
+    modo: args.modo ?? 'lookbook',
+    variacao: args.variacao ?? 0,
   })
 
   if (!image.url) return { success: false, error: image.warning, costUsd: budget.total }
@@ -334,7 +342,7 @@ export async function renderLookImage(args: {
     prompt: image.prompt,
     image_url: image.ref,
     model: image.model,
-    generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy, qualidade },
+    generation_metadata: { attempts: image.attempts, issues: image.issues, checkedBy: image.checkedBy, qualidade, modo: args.modo ?? 'lookbook' },
     quality_score: image.qualityScore,
   })
 
@@ -364,6 +372,8 @@ async function renderWithRetries(args: {
   budget: CostBudget
   repo: Repository
   qualidade?: 'previa' | 'final'
+  modo?: 'lookbook' | 'try-on'
+  variacao?: number
 }): Promise<RenderOutcome> {
   const { request, outfit, intent, photoUrl, budget, repo } = args
   const previa = args.qualidade === 'previa'
@@ -382,6 +392,8 @@ async function renderWithRetries(args: {
       items: outfit.items,
       intent,
       correctionNotes: corrections,
+      modo: args.modo ?? 'lookbook',
+      variacao: args.variacao ?? 0,
     })
     // Media na previa: 'low' borra tecido e rosto, e o ponto aqui e ver a
     // roupa no corpo. 'high' fica para o look salvo.

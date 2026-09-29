@@ -28,27 +28,25 @@ export class OpenAIImageProvider implements ImageProvider {
         }),
       )
 
-      if (files.length === 0) throw new Error('Nenhuma referência visual disponível')
+      // Sem nenhuma referência (peças ainda sem foto), a imagem nasce só do
+      // texto: melhor um look desenhado do que nenhum look.
+      const response =
+        files.length === 0
+          ? await this.client.images.generate({
+              model: env.imageModel,
+              prompt: buildPrompt(input),
+              size: input.size,
+              quality: input.quality,
+              n: 1,
+            })
+          : await this.editarComReferencias(files, input)
 
-      const temPessoa = input.references.some((r) => r.kind === 'person')
-      const response = await this.client.images.edit({
-        model: env.imageModel,
-        image: files,
-        prompt: buildPrompt(input),
-        size: input.size,
-        quality: input.quality,
-        // Fidelidade alta preserva o rosto da referência — custa mais, então
-        // só entra na imagem definitiva, não na prévia.
-        ...(temPessoa && input.quality === 'high' ? { input_fidelity: 'high' as const } : {}),
-        n: 1,
-      })
-
-      const b64 = response.data?.[0]?.b64_json
-      if (!b64) throw new Error('Resposta do modelo veio sem imagem')
+      const b64Direto = response.data?.[0]?.b64_json
+      if (!b64Direto) throw new Error('Resposta do modelo veio sem imagem')
 
       return {
         success: true,
-        image_base64: b64,
+        image_base64: b64Direto,
         model: env.imageModel,
         provider: this.name,
         estimated_cost: estimateImageCost(1, input.quality),
@@ -63,6 +61,26 @@ export class OpenAIImageProvider implements ImageProvider {
         latency_ms: Date.now() - started,
         error: error instanceof Error ? error.message : 'Erro desconhecido na geração',
       }
+    }
+  }
+
+  private async editarComReferencias(
+    files: Awaited<ReturnType<typeof toFile>>[],
+    input: ImageGenerationInput,
+  ) {
+    {
+      const temPessoa = input.references.some((r) => r.kind === 'person')
+      return await this.client.images.edit({
+        model: env.imageModel,
+        image: files,
+        prompt: buildPrompt(input),
+        size: input.size,
+        quality: input.quality,
+        // Fidelidade alta preserva o rosto da referência — custa mais, então
+        // só entra na imagem definitiva, não na prévia.
+        ...(temPessoa && input.quality === 'high' ? { input_fidelity: 'high' as const } : {}),
+        n: 1,
+      })
     }
   }
 }

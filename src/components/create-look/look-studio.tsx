@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Heart, Loader2, Plus, RefreshCw, Replace, Save, ShoppingBag, Sparkles, Wand2 } from 'lucide-react'
+import { Eye, Heart, Loader2, Plus, RefreshCw, Replace, Save, ShoppingBag, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { WardrobeItem } from '@/schemas/wardrobe'
 import { roleLabel } from '@/lib/labels'
@@ -94,6 +94,7 @@ export function LookStudio() {
   const [gerando, setGerando] = useState<string | null>(null)
   const [vestindo, setVestindo] = useState<Set<string>>(new Set())
   const [vestindoCasaco, setVestindoCasaco] = useState<string | null>(null)
+  const [modoDoLook, setModoDoLook] = useState<Record<string, 'lookbook' | 'try-on'>>({})
   const [semFoto, setSemFoto] = useState(false)
   const [falhas, setFalhas] = useState<Record<string, string>>({})
   const [ajuste, setAjuste] = useState<Record<string, string>>({})
@@ -187,7 +188,7 @@ export function LookStudio() {
     // deliberado — não acontece nas três opções, só na que ela escolheu.
     setGerando(p.outfitId)
     setFeedback('Look salvo. Caprichando na foto com você vestindo…')
-    const ok = await vestir(p.outfitId, 'final')
+    const ok = await vestir(p.outfitId, 'final', modoDoLook[p.outfitId] ?? 'lookbook')
     setGerando(null)
     setFeedback(
       ok
@@ -214,12 +215,17 @@ export function LookStudio() {
    * prévia das 3 opções sai sozinha, em qualidade média, e o acabamento fica
    * para a que a pessoa salvar.
    */
-  async function vestir(outfitId: string, qualidade: 'previa' | 'final'): Promise<boolean> {
+  async function vestir(
+    outfitId: string,
+    qualidade: 'previa' | 'final',
+    modo: 'lookbook' | 'try-on' = 'lookbook',
+    variacao = 0,
+  ): Promise<boolean> {
     try {
       const res = await fetch(`/api/outfits/${outfitId}/image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qualidade }),
+        body: JSON.stringify({ qualidade, modo, variacao }),
       })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error ?? 'Não consegui gerar a imagem.')
@@ -280,12 +286,35 @@ export function LookStudio() {
     }
   }
 
+  /**
+   * Modo B: o mesmo look, agora na foto dela.
+   * O padrão é a modelo do app — serve para explorar combinação. Ver em si
+   * mesma é outra pergunta, e só vale a pena quando ela quer conferir.
+   */
+  async function verEmMim(p: Proposal, indice: number) {
+    setModoDoLook((prev) => ({ ...prev, [p.outfitId]: 'try-on' }))
+    setImagens((prev) => {
+      const resto = { ...prev }
+      delete resto[p.outfitId]
+      return resto
+    })
+    setVestindo((prev) => new Set(prev).add(p.outfitId))
+    await vestir(p.outfitId, 'previa', 'try-on', indice)
+    setVestindo((prev) => {
+      const resto = new Set(prev)
+      resto.delete(p.outfitId)
+      return resto
+    })
+  }
+
   /** Dispara as três de uma vez; cada cartão troca assim que a sua fica pronta. */
   async function vestirTodas(propostas: Proposal[]) {
     setVestindo(new Set(propostas.map((p) => p.outfitId)))
     await Promise.all(
-      propostas.map(async (p) => {
-        await vestir(p.outfitId, 'previa')
+      propostas.map(async (p, i) => {
+        // A variação muda pose, enquadramento e expressão entre as três: uma
+        // sessão de fotos, não a mesma foto três vezes.
+        await vestir(p.outfitId, 'previa', 'lookbook', i)
         setVestindo((prev) => {
           const resto = new Set(prev)
           resto.delete(p.outfitId)
@@ -516,6 +545,14 @@ export function LookStudio() {
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => generate({ excludeIds: p.items.map((x) => x.item.id) })}>
                         <RefreshCw className="size-3.5" /> Outra
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => verEmMim(p, i)}
+                        disabled={vestindo.has(p.outfitId)}
+                      >
+                        <Eye className="size-3.5" /> Ver em mim
                       </Button>
                       {!p.items.some((x) => x.role === 'outerwear') && (
                         <Button
