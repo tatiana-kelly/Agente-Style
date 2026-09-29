@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { clienteDeStyling } from '@/lib/ai/openai-client'
 import { env, hasOpenAI } from '@/lib/env'
 import { approxTokens, estimateTextCost } from '@/lib/ai/cost'
 import type { OutfitProposal } from '@/agents/outfit-agent'
@@ -77,7 +77,7 @@ ${looks
 Revise.`
 
   try {
-    const client = new OpenAI({ apiKey: env.openaiKey })
+    const client = clienteDeStyling()
     const completion = await client.chat.completions.create({
       model: env.textModel,
       response_format: { type: 'json_object' },

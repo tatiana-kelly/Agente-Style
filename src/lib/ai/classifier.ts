@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { clienteDeVisao } from '@/lib/ai/openai-client'
 import {
   classificationSchema,
   type Classification,
@@ -88,7 +88,7 @@ export async function classifyGarment(
   }
 
   try {
-    const client = new OpenAI({ apiKey: env.openaiKey })
+    const client = clienteDeVisao()
     const userText = hint
       ? `Contexto do usuário: "${hint}". Catalogue as peças da imagem.`
       : 'Catalogue as peças da imagem.'

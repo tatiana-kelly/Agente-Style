@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { clienteDeStyling } from '@/lib/ai/openai-client'
 import { env, hasOpenAI } from '@/lib/env'
 import { approxTokens, estimateTextCost } from '@/lib/ai/cost'
 import { OCCASIONS } from '@/schemas/wardrobe'
@@ -49,7 +49,7 @@ export async function interpretarPedido(texto: string): Promise<PedidoEntendido>
   const system = SYSTEM.replace('OCASIOES', OCCASIONS.join(', ')).replace('ESTILOS', STYLES.join(', '))
 
   try {
-    const client = new OpenAI({ apiKey: env.openaiKey })
+    const client = clienteDeStyling()
     const completion = await client.chat.completions.create({
       model: env.textModel,
       response_format: { type: 'json_object' },

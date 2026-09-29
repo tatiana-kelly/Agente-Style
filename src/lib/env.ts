@@ -18,6 +18,10 @@ export const env = {
   maxDailyCostUsd: Number(process.env.AI_MAX_DAILY_COST_USD ?? '5'),
   maxRequestCostUsd: Number(process.env.AI_MAX_REQUEST_COST_USD ?? '0.5'),
   maxImageRetries: Number(process.env.AI_MAX_IMAGE_RETRIES ?? '2'),
+  /** Prazo da stylist e do crítico: passou disso, o motor decide sozinho. */
+  stylingTimeoutMs: Number(process.env.AI_STYLING_TIMEOUT_MS ?? '15000'),
+  /** Prazo da visão: classificar peça é o que a pessoa está esperando. */
+  visionTimeoutMs: Number(process.env.AI_VISION_TIMEOUT_MS ?? '45000'),
 } as const
 
 /**

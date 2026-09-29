@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { clienteDeVisao } from '@/lib/ai/openai-client'
 import type { ImageGenerationInput, ImageGenerationResult, QualityReport } from '@/schemas/image'
 import { env, hasOpenAI } from '@/lib/env'
 import { estimateTextCost } from '@/lib/ai/cost'
@@ -93,7 +93,7 @@ AVALIE a apresentação em "apresentacao" (0..1), e reprove abaixo de 0,4:
 enquadramento quando o problema for de apresentação.`
 
 async function visionCheck(input: QualityControlInput): Promise<QualityControlOutput> {
-  const client = new OpenAI({ apiKey: env.openaiKey })
+  const client = clienteDeVisao()
   const expected = input.request.references
     .filter((r) => r.kind === 'garment')
     .map((r) => `- ${r.label}`)
