@@ -18,6 +18,8 @@ export interface ClassificationResult {
   /** Todas as peças encontradas na foto. Nunca vazio. */
   items: DetectedGarment[]
   source: 'openai' | 'heuristic'
+  /** Modelo que respondeu de fato — o rótulo genérico escondia troca de modelo. */
+  model: string
   estimated_cost: number
   latency_ms: number
   warning?: string
@@ -78,6 +80,7 @@ export async function classifyGarment(
     return {
       items: [single(heuristicClassify(hint ?? ''))],
       source: 'heuristic',
+      model: 'heuristica',
       estimated_cost: 0,
       latency_ms: Date.now() - started,
       warning: 'OPENAI_API_KEY ausente: peça classificada por heurística, revise os campos.',
@@ -137,6 +140,7 @@ export async function classifyGarment(
       return {
         items: [single(heuristicClassify(hint ?? ''))],
         source: 'heuristic',
+        model: env.textModel,
         estimated_cost: cost,
         latency_ms: Date.now() - started,
         warning: 'Resposta da IA fora do formato esperado; usei a heurística. Revise os campos.',
@@ -159,6 +163,7 @@ export async function classifyGarment(
     return {
       items,
       source: 'openai',
+      model: env.textModel,
       estimated_cost: cost,
       latency_ms: Date.now() - started,
       warning: avisos.length > 0 ? avisos.join(' ') : undefined,
@@ -167,6 +172,7 @@ export async function classifyGarment(
     return {
       items: [single(heuristicClassify(hint ?? ''))],
       source: 'heuristic',
+      model: 'heuristica',
       estimated_cost: 0,
       latency_ms: Date.now() - started,
       warning:

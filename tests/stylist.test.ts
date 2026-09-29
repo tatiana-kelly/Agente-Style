@@ -67,6 +67,8 @@ describe('stylist — a OpenAI escolhe entre os candidatos do motor', () => {
     expect(r.etiquetas[0]).toBe('Casual chic')
     expect(r.fonte).toBe('openai')
     expect(r.custo).toBeGreaterThan(0)
+    // O modelo fica registrado: é assim que se confere uma troca de modelo.
+    expect(r.modelo).toBe('gpt-5-mini')
   })
 
   it('descarta índice inválido — a IA não pode inventar peça nem look', async () => {

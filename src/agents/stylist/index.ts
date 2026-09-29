@@ -38,6 +38,8 @@ export interface EscolhaDoStylist {
   etiquetas: string[]
   custo: number
   fonte: 'openai' | 'motor'
+  /** Modelo que respondeu — para conferir de fora qual está no ar. */
+  modelo: string
   aviso?: string
 }
 
@@ -89,6 +91,7 @@ function escolhaDoMotor(input: StylistInput, aviso?: string): EscolhaDoStylist {
     etiquetas: input.candidatos.slice(0, n).map((c) => c.etiqueta),
     custo: 0,
     fonte: 'motor',
+    modelo: 'motor',
     aviso,
   }
 }
@@ -157,6 +160,7 @@ Escolha ${input.quantidade} looks, do melhor para o menos bom.`
       etiquetas: escolhidos.map((indice, pos) => etiquetas[pos] || input.candidatos[indice].etiqueta),
       custo,
       fonte: 'openai',
+      modelo: env.textModel,
     }
   } catch (error) {
     return escolhaDoMotor(

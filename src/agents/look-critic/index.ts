@@ -28,6 +28,7 @@ export interface ResultadoDoCritic {
   criticas: CriticaDoLook[]
   custo: number
   fonte: 'openai' | 'regras'
+  modelo: string
 }
 
 const SYSTEM = `Você revisa looks montados por uma stylist, antes de a cliente ver.
@@ -62,7 +63,7 @@ export async function runLookCritic(looks: OutfitProposal[]): Promise<ResultadoD
   const porRegras = criticaPorRegras(looks)
 
   if (!hasOpenAI) {
-    return { aprovado: porRegras.length === 0, criticas: porRegras, custo: 0, fonte: 'regras' }
+    return { aprovado: porRegras.length === 0, criticas: porRegras, custo: 0, fonte: 'regras', modelo: 'regras' }
   }
 
   const userText = `Looks escolhidos:
@@ -117,8 +118,9 @@ Revise.`
       criticas: todas,
       custo,
       fonte: 'openai',
+      modelo: env.textModel,
     }
   } catch {
-    return { aprovado: porRegras.length === 0, criticas: porRegras, custo: 0, fonte: 'regras' }
+    return { aprovado: porRegras.length === 0, criticas: porRegras, custo: 0, fonte: 'regras', modelo: 'regras' }
   }
 }

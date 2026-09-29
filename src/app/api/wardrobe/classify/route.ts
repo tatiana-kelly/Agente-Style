@@ -19,7 +19,9 @@ export async function POST(request: Request) {
     await repo.logAiUsage({
       user_id: user.id,
       provider: result.source === 'openai' ? 'openai' : 'local',
-      model: result.source === 'openai' ? 'text-vision' : 'heuristic',
+      // O id real, não um rótulo: é assim que dá para conferir de fora qual
+      // modelo está respondendo depois de uma troca.
+      model: result.model,
       operation: 'classify_garment',
       estimated_cost: result.estimated_cost,
       latency_ms: result.latency_ms,

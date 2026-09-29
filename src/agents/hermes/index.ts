@@ -206,6 +206,15 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       quantidade: 3,
     })
     cobrar(budget, escolha.custo, 'stylist')
+    await repo.logAiUsage({
+      user_id: request.userId,
+      provider: escolha.fonte === 'openai' ? 'openai' : 'local',
+      model: escolha.modelo,
+      operation: 'stylist_escolhe_look',
+      estimated_cost: escolha.custo,
+      latency_ms: 0,
+      success: escolha.fonte === 'openai',
+    })
 
     const todos = [outfit.primary, ...outfit.alternatives].filter(Boolean) as OutfitProposal[]
     let escolhidos = escolha.escolhidos.map((i, pos) => ({
@@ -218,6 +227,15 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
     // pelo melhor candidato que sobrou. Um ciclo — dois já seria teimosia.
     const critica = await runLookCritic(escolhidos)
     cobrar(budget, critica.custo, 'look-critic')
+    await repo.logAiUsage({
+      user_id: request.userId,
+      provider: critica.fonte === 'openai' ? 'openai' : 'local',
+      model: critica.modelo,
+      operation: 'look_critic',
+      estimated_cost: critica.custo,
+      latency_ms: 0,
+      success: critica.fonte === 'openai',
+    })
     const notasDaCritica: string[] = []
 
     if (!critica.aprovado && critica.criticas.length > 0) {
