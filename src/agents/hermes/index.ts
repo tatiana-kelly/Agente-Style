@@ -465,7 +465,7 @@ export async function renderLookImage(args: {
 
   const image = await renderWithRetries({
     request: { userId, style: outfit.style, intent: 'render_only' } as HermesRequest,
-    outfit: { etiqueta: '', sugestao: null, items: picks, scores: {}, explanation: outfit.explanation, name: outfit.name, formulaId: '', formulaName: '', tier: 1, signature: '' },
+    outfit: { etiqueta: '', sugestao: null, complementos: [], items: picks, scores: {}, explanation: outfit.explanation, name: outfit.name, formulaId: '', formulaName: '', tier: 1, signature: '' },
     intent,
     photoUrl: photo?.image_url ?? null,
     budget,

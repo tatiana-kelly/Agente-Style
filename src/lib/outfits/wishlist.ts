@@ -176,3 +176,48 @@ function avaliarRegras(
 
   return null
 }
+
+/**
+ * "Esse look também combina com…" — o que falta para o look ficar completo.
+ *
+ * A regra dela: todo look tem cinto, bolsa e sapato. Quando o motor não achou
+ * um que combine (ou o armário não tem), a sugestão aparece embaixo da foto,
+ * na cor da base do look, com link para comprar. É complemento, não conselho
+ * genérico: cada item citado é o que ESTE look está pedindo.
+ */
+export function complementosDoLook(picks: Peca[], acervo: WardrobeItem[]): Sugestao[] {
+  const cor = corDeApoio(picks)
+  const faltando: Sugestao[] = []
+
+  if (!picks.some((p) => p.role === 'shoes')) {
+    faltando.push({
+      peca: `um calçado ${cor}`,
+      motivo: temSubcategoria(acervo, ['salto', 'sapato', 'sapatilha', 'tenis'])
+        ? 'Nenhum calçado seu fechou o registro deste look.'
+        : 'Você ainda não tem calçado cadastrado.',
+      termoDeBusca: `sapato feminino ${cor}`,
+    })
+  }
+
+  if (!noLook(picks, ['cinto'])) {
+    faltando.push({
+      peca: `um cinto ${cor} de fivela discreta`,
+      motivo: temSubcategoria(acervo, ['cinto'])
+        ? 'Seus cintos não combinaram com a paleta deste look.'
+        : 'Você ainda não tem cinto cadastrado.',
+      termoDeBusca: `cinto feminino ${cor} fivela pequena`,
+    })
+  }
+
+  if (!picks.some((p) => p.role === 'bag')) {
+    faltando.push({
+      peca: `uma bolsa estruturada ${cor}`,
+      motivo: temSubcategoria(acervo, ['bolsa'])
+        ? 'Suas bolsas não combinaram com a paleta deste look.'
+        : 'Você ainda não tem bolsa cadastrada.',
+      termoDeBusca: `bolsa estruturada ${cor}`,
+    })
+  }
+
+  return faltando
+}

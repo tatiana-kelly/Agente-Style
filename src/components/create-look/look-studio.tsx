@@ -19,6 +19,7 @@ interface Proposal {
   name: string
   etiqueta?: string
   sugestao?: Sugestao | null
+  complementos?: Sugestao[]
   explanation: string
   items: Array<{ role: string; item: WardrobeItem }>
 }
@@ -488,6 +489,29 @@ export function LookStudio() {
                       {p.etiqueta ?? (i === 0 ? 'Principal' : `Opção ${i + 1}`)}
                     </span>
                   </figure>
+
+                  {p.complementos && p.complementos.length > 0 && (
+                    // Embaixo da foto, como ela pediu: o que falta para o look
+                    // ficar completo, com link para comprar se não tiver.
+                    <p className="border-b border-sand/60 px-4 py-2.5 text-xs leading-relaxed text-cocoa">
+                      <span className="font-medium text-espresso">Esse look também combina com </span>
+                      {p.complementos.map((c, k) => (
+                        <span key={c.termoDeBusca}>
+                          {k > 0 && (k === p.complementos!.length - 1 ? ' e ' : ', ')}
+                          <a
+                            href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(c.termoDeBusca)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline underline-offset-2 hover:text-espresso"
+                            title={c.motivo}
+                          >
+                            {c.peca}
+                          </a>
+                        </span>
+                      ))}
+                      .
+                    </p>
+                  )}
 
                   <div className="flex flex-1 flex-col p-4">
                     <ul className="space-y-1.5">

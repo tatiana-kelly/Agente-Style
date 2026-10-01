@@ -3,7 +3,7 @@ import type { OutfitRole } from '@/schemas/outfit'
 import { generateCandidates, signature, type EngineContext, type OutfitCandidate } from '@/lib/outfits/engine'
 import { describeRelation } from '@/lib/outfits/color-engine'
 import { avaliarPaleta } from '@/lib/outfits/style-dna'
-import { sugerirCompra, type Sugestao } from '@/lib/outfits/wishlist'
+import { complementosDoLook, sugerirCompra, type Sugestao } from '@/lib/outfits/wishlist'
 import { occasionLabel, roleLabel, styleLabel } from '@/lib/labels'
 
 export interface OutfitProposal {
@@ -11,6 +11,8 @@ export interface OutfitProposal {
   etiqueta: string
   /** "Esse look pede isso aqui" — peça que falta no guarda-roupa. */
   sugestao: Sugestao | null
+  /** Cinto, bolsa ou sapato que faltou neste look: "esse look também combina com…". */
+  complementos: Sugestao[]
   items: Array<{ item: WardrobeItem; role: OutfitRole }>
   scores: Record<string, number>
   explanation: string
@@ -92,6 +94,7 @@ function toProposal(
   return {
     etiqueta: candidate.formula.name,
     sugestao: sugerirCompra(candidate.items, acervo, candidate.formula, jaSugeridas),
+    complementos: complementosDoLook(candidate.items, acervo),
     items: candidate.items.map((i) => ({ item: i.item, role: i.role })),
     scores: candidate.scores as unknown as Record<string, number>,
     explanation: explain(candidate),

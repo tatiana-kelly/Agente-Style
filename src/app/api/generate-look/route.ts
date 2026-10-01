@@ -30,6 +30,7 @@ export async function POST(request: Request) {
         name: p.proposal.name,
         etiqueta: p.proposal.etiqueta,
         sugestao: p.proposal.sugestao,
+        complementos: p.proposal.complementos,
         items: p.proposal.items.map((i) => ({ role: i.role, item: itemsById.get(i.item.id) ?? i.item })),
       })),
     })

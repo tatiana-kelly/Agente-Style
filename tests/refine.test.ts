@@ -71,11 +71,19 @@ function ctx(over: Partial<EngineContext> = {}): EngineContext {
 }
 
 describe('acessórios no look (§1)', () => {
-  it('acabamento desligado: nenhum look sai com acessório ou bolsa', () => {
-    // A pedido dela, enquanto os acessórios de verdade não estão cadastrados.
+  it('todo look sai com cinto, bolsa e sapato — e sem joia por enquanto', () => {
+    // Regra dela: cinto, bolsa e sapato em tudo. Joias ficam de fora até ela
+    // cadastrar as de verdade.
     const r = generateCandidates(items, ctx(), 3)
+    expect(r.candidates.length).toBeGreaterThan(0)
+    // O guarda-roupa demo tem bolsa mas não tem cinto: o cinto só pode ser
+    // exigido quando existe — quando não existe, vira sugestão de compra.
+    const temCinto = items.some((i) => i.subcategory === 'cinto')
     for (const c of r.candidates) {
-      expect(c.items.some((i) => i.role === 'accessory' || i.role === 'bag')).toBe(false)
+      expect(c.items.some((i) => i.role === 'shoes')).toBe(true)
+      expect(c.items.some((i) => i.role === 'bag')).toBe(true)
+      expect(c.items.some((i) => i.item.subcategory === 'cinto')).toBe(temCinto)
+      expect(c.items.some((i) => ['colar', 'brinco', 'anel', 'joia', 'bijuteria'].includes(i.item.subcategory))).toBe(false)
     }
   })
 

@@ -77,3 +77,36 @@ describe('esse look pede isso aqui', () => {
     expect(sugerirCompra(completo, acervo, formulaSocial)).toBeNull()
   })
 })
+
+describe('esse look também combina com…', () => {
+  it('lista cinto e bolsa quando o look saiu sem eles', async () => {
+    const { complementosDoLook } = await import('@/lib/outfits/wishlist')
+    const c = complementosDoLook(look, [camisa, calca, salto])
+    expect(c.map((s) => s.peca)).toEqual(['um cinto caramelo de fivela discreta', 'uma bolsa estruturada caramelo'])
+    // Sem cinto nem bolsa cadastrados, o motivo diz isso — é compra, não troca.
+    expect(c[0].motivo).toMatch(/não tem cinto/)
+    expect(c[1].motivo).toMatch(/não tem bolsa/)
+  })
+
+  it('quando ela tem a peça mas não combinou, o motivo é outro', async () => {
+    const { complementosDoLook } = await import('@/lib/outfits/wishlist')
+    const c = complementosDoLook(look, [camisa, calca, salto, cinto, bolsa])
+    expect(c[0].motivo).toMatch(/não combinaram/)
+  })
+
+  it('look completo não recebe complemento nenhum', async () => {
+    const { complementosDoLook } = await import('@/lib/outfits/wishlist')
+    const completo = [...look, peca('accessory', cinto), peca('bag', bolsa)]
+    expect(complementosDoLook(completo, [camisa, calca, salto, cinto, bolsa])).toEqual([])
+  })
+
+  it('a cor sugerida acompanha a base do look', async () => {
+    const { complementosDoLook } = await import('@/lib/outfits/wishlist')
+    const escuro = [
+      peca('top', item({ id: 'tp', category: 'top', subcategory: 'camisa', color: 'preto', formality: 7 })),
+      peca('bottom', item({ id: 'bp', category: 'bottom', subcategory: 'calca', color: 'preto', formality: 7 })),
+      peca('shoes', salto),
+    ]
+    for (const s of complementosDoLook(escuro, [])) expect(s.peca).toContain('preto')
+  })
+})

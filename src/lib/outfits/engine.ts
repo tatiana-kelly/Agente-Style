@@ -391,11 +391,12 @@ function buildFromFormula(
 }
 
 /**
- * Acessório e bolsa estão desligados a pedido dela: o que está cadastrado
- * nesses papéis veio junto das fotos em lote e não é o acervo real. Volta a
- * ligar quando ela cadastrar os acessórios de verdade — é só trocar para true.
+ * O que termina um look, a pedido dela: cinto, bolsa e sapato em todos.
+ * Joias ficam de fora até ela cadastrar as de verdade — o que está no banco
+ * nesse papel veio junto das fotos em lote.
  */
-const ACABAMENTO_ATIVO = false
+const ACABAMENTO = { bolsa: true, cinto: true, joias: false } as const
+const ACABAMENTO_ATIVO = ACABAMENTO.bolsa || ACABAMENTO.cinto || ACABAMENTO.joias
 
 /** Quantas peças cada papel opcional pode contribuir. */
 const MAX_POR_PAPEL: Partial<Record<OutfitRole, number>> = {
@@ -458,8 +459,15 @@ function addOptional(
     if (!slots.some((s) => s.role === 'bag')) slots.push(BOLSA_PADRAO)
   }
 
-  for (const slot of slots) {
-    if (!ACABAMENTO_ATIVO && (slot.role === 'accessory' || slot.role === 'bag')) continue
+  for (const slotOriginal of slots) {
+    if (!ACABAMENTO_ATIVO && (slotOriginal.role === 'accessory' || slotOriginal.role === 'bag')) continue
+    if (slotOriginal.role === 'bag' && !ACABAMENTO.bolsa) continue
+    // Sem joias no acervo real, o slot de acessório só aceita cinto.
+    const slot: FormulaSlot =
+      slotOriginal.role === 'accessory' && !ACABAMENTO.joias
+        ? { role: 'accessory', archetypes: ACABAMENTO.cinto ? ['belt'] : [] }
+        : slotOriginal
+    if (slot.role === 'accessory' && slot.archetypes.length === 0) continue
 
     // Um acessório termina o look; o segundo só quando a fórmula pede — e
     // ainda assim precisa acrescentar algo, não repetir o primeiro.
@@ -481,7 +489,9 @@ function addOptional(
       if (adicionados >= limite) break
       // Acabamento precisa merecer o lugar: com limiar baixo, todo acessório
       // neutro entrava e os três looks saíam com o mesmo par dourado.
-      if (candidato.value < 0.6) continue
+      // Cinto e bolsa são pedido dela — entram com a barra mais baixa.
+      const essencial = slot.role === 'bag' || candidato.item.subcategory === 'cinto'
+      if (candidato.value < (essencial ? 0.4 : 0.6)) continue
       // Não empilhar três colares: uma peça por família de acessório.
       const familia = familiaDoAcessorio(candidato.item.subcategory)
       if (familiasUsadas.has(familia)) continue
