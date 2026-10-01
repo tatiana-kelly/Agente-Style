@@ -27,6 +27,10 @@ export interface StylistInput {
   /** Só para a IA descrever cor e peça com precisão. */
   acervo: WardrobeItem[]
   quantidade: number
+  /** O que ela exigiu no texto ("calça preta"): já filtrado pelo motor. */
+  exigencias?: string[]
+  /** Nomes das peças dos últimos looks: repetir só se não houver alternativa. */
+  pecasRecentes?: string[]
 }
 
 export interface EscolhaDoStylist {
@@ -52,7 +56,8 @@ CRITÉRIOS, nesta ordem:
 2. Styling: terceira peça quando melhora, proporção, calçado coerente com o registro.
 3. Aderência ao estilo da cliente e ao pedido dela.
 4. Adequação ao clima e à ocasião.
-5. Diversidade real entre os escolhidos: estrutura diferente, não a mesma base com outra blusa.
+5. Diversidade real entre os escolhidos: estrutura diferente, e NENHUMA peça de roupa repetida
+   entre eles — nem o calçado. Três looks com o mesmo tênis são um look só.
 
 Responda SOMENTE JSON:
 {"escolhidos":[indices],"etiquetas":["Casual chic",...],"explicacoes":["...",...]}
@@ -107,6 +112,9 @@ export async function runStylist(input: StylistInput): Promise<EscolhaDoStylist>
 OCASIÃO: ${input.ocasiao} · CLIMA: ${input.clima}
 PERFIL: ${perfilEmTexto(input.perfil)}
 
+${input.exigencias?.length ? `ELA EXIGIU: ${input.exigencias.join('; ')} — todos os looks abaixo já respeitam isso.
+` : ''}${input.pecasRecentes?.length ? `PEÇAS DOS ÚLTIMOS LOOKS (evite repetir quando houver alternativa): ${[...new Set(input.pecasRecentes)].join(', ')}
+` : ''}
 O QUE ELA CONSIDERA BONITO (extraído das referências que ela escolheu):
 ${DNA_DAS_REFERENCIAS}
 

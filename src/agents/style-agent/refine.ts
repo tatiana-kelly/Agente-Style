@@ -63,6 +63,17 @@ const TERMOS: Array<{ re: RegExp; subs: string[] }> = [
   { re: /\bvestidos?\b/i, subs: ['vestido'] },
 ]
 
+/** Estampas como a pessoa fala, mapeadas para o que o banco guarda. */
+const ESTAMPAS: Array<{ re: RegExp; pattern: string }> = [
+  { re: /\blistrad[ao]s?\b|\blistras?\b/i, pattern: 'listrado' },
+  { re: /\bxadrez\b/i, pattern: 'xadrez' },
+  { re: /\bflora(l|is)\b/i, pattern: 'floral' },
+  { re: /\bpo[aá]\b|\bbolinhas?\b/i, pattern: 'poa' },
+  { re: /\banimal[- ]?print\b|\bon[cç]a\b/i, pattern: 'animal-print' },
+  { re: /\bestampad[ao]s?\b/i, pattern: 'estampado' },
+  { re: /\blis[ao]s?\b/i, pattern: 'liso' },
+]
+
 const CORES = [
   'preto', 'preta', 'branco', 'branca', 'vermelho', 'vermelha', 'azul', 'marinho',
   'verde', 'amarelo', 'amarela', 'rosa', 'roxo', 'roxa', 'cinza', 'bege', 'nude',
@@ -173,4 +184,55 @@ export function faltantes(instrucao: string, items: WardrobeItem[]): string[] {
     if (limpo) faltas.push(limpo)
   }
   return [...new Set(faltas)]
+}
+
+/**
+ * Exigência de peça tirada do texto livre.
+ *
+ * "Calça preta" na caixa de pedido não é ajuste de um look existente — é a
+ * condição do look inteiro: TODAS as opções precisam ter uma calça preta.
+ * Diferente de travar um id (que repetiria a mesma calça nas três), a exigência
+ * restringe o PAPEL: qualquer calça preta do armário serve, e as três opções
+ * ainda podem variar entre elas.
+ */
+export interface Exigencia {
+  role: WardrobeItem['category']
+  subcategories: string[]
+  /** Cor normalizada, quando foi dita. */
+  color?: string
+  /** Estampa, quando foi dita ("camisa listrada"). */
+  pattern?: string
+  /** Como a pessoa escreveu, para devolver na explicação. */
+  texto: string
+}
+
+export function exigenciasDoTexto(texto: string, items: WardrobeItem[]): Exigencia[] {
+  const limpo = (texto ?? '').trim()
+  if (!limpo) return []
+
+  const exigencias: Exigencia[] = []
+  for (const trecho of segmentar(limpo)) {
+    // Negação é exclusão, não exigência — isso o parseRefinement já trata.
+    if (VERBOS_REMOVER.test(trecho) || VERBO_TROCAR.test(trecho)) continue
+
+    const termo = TERMOS.find((t) => t.re.test(trecho))
+    if (!termo) continue
+
+    const corPedida = CORES.find((c) => new RegExp(`\\b${c}\\b`, 'i').test(trecho))
+    const color = corPedida ? normalizeColor(corPedida.replace(/a$/, 'o')) : undefined
+    // "camisa listrada": a estampa é parte do pedido tanto quanto a cor.
+    const pattern = ESTAMPAS.find((e) => e.re.test(trecho))?.pattern
+    const casados = casar(trecho, items).filter((i) => !pattern || i.pattern === pattern)
+    // Exigir o que não existe só deixaria a pessoa sem look.
+    if (casados.length === 0) continue
+
+    exigencias.push({
+      role: casados[0].category,
+      subcategories: termo.subs,
+      color,
+      pattern,
+      texto: trecho,
+    })
+  }
+  return exigencias
 }

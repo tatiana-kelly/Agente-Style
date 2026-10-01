@@ -17,6 +17,33 @@ import { runLookCritic } from '@/agents/look-critic'
  */
 const CANDIDATOS_PARA_A_STYLIST = 12
 
+/**
+ * Reaplica a regra de peças diferentes sobre a ordem que a stylist escolheu.
+ * A preferência dela é respeitada (vem primeiro); o que ela repetiu é trocado
+ * pelo próximo candidato que não divide roupa com os já escolhidos.
+ */
+function garantirPecasDiferentes(
+  escolhidos: OutfitProposal[],
+  todos: OutfitProposal[],
+): OutfitProposal[] {
+  // A stylist pode devolver o mesmo look duas vezes; aqui cada look conta uma.
+  const vistos = new Set<string>()
+  const ordenados = [...escolhidos, ...todos].filter((c) => {
+    if (vistos.has(c.signature)) return false
+    vistos.add(c.signature)
+    return true
+  })
+
+  const candidatos = ordenados.map((p, pos) => ({
+    look: comparavel(p.items.map((i) => ({ ...i, slotAffinity: 1 })), p.formulaId),
+    // Posição vira qualidade: a stylist pôs em primeiro quem ela preferiu.
+    qualidade: 1 - pos / Math.max(ordenados.length, 1),
+    original: p,
+  }))
+
+  return selecionarDiversos(candidatos, Math.max(escolhidos.length, 1))
+}
+
 /** Estourar o teto não pode derrubar o look já montado: anota e segue. */
 function cobrar(budget: CostBudget, custo: number, operacao: string): void {
   if (custo <= 0) return
@@ -26,7 +53,8 @@ function cobrar(budget: CostBudget, custo: number, operacao: string): void {
     if (!(e instanceof BudgetExceededError)) throw e
   }
 }
-import { faltantes, parseRefinement } from '@/agents/style-agent/refine'
+import { exigenciasDoTexto, faltantes, parseRefinement } from '@/agents/style-agent/refine'
+import { comparavel, selecionarDiversos } from '@/lib/outfits/diversity'
 import type { EngineContext } from '@/lib/outfits/engine'
 import { runImageDirector } from '@/agents/image-director'
 import { runQualityControl } from '@/agents/quality-control'
@@ -168,7 +196,14 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       ? parseRefinement(request.instruction, items).includeIds
       : []
 
+    // "Calça preta" na caixa de pedido é condição do look inteiro, não ajuste.
+    // Antes isso era lido e descartado: a pessoa pedia calça e recebia short.
+    const textoDoPedido = [request.context ?? '', ...entendido.pecasCitadas].join('. ')
+    const exigencias = exigenciasDoTexto(textoDoPedido, items)
+    const notasDeExigencia = exigencias.map((e) => `Mantive ${e.texto.toLowerCase()} em todas as opções, como você pediu.`)
+
     const engineCtx: EngineContext = {
+      exigencias,
       style: intent.style,
       occasion: intent.occasion,
       season: intent.season,
@@ -198,6 +233,11 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
 
     const escolha = await runStylist({
       pedido: request.context,
+      exigencias: exigencias.map((e) => e.texto),
+      pecasRecentes: recentItemIds
+        .slice(0, 12)
+        .map((id) => items.find((i) => i.id === id)?.name)
+        .filter((n): n is string => Boolean(n)),
       ocasiao: intent.occasion,
       clima: intent.clima,
       candidatos: [outfit.primary, ...outfit.alternatives].filter(Boolean) as OutfitProposal[],
@@ -236,7 +276,7 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
       latency_ms: 0,
       success: critica.fonte === 'openai',
     })
-    const notasDaCritica: string[] = []
+    const notasDaCritica: string[] = [...notasDeExigencia]
 
     if (!critica.aprovado && critica.criticas.length > 0) {
       const usados = new Set(escolhidos.map((e) => e.signature))
@@ -251,6 +291,11 @@ export async function runHermes(request: HermesRequest, deps: HermesDeps): Promi
         return substituto
       })
     }
+
+    // A stylist escolhe por gosto; a regra "nenhuma peça repetida entre as
+    // opções" é do código e vale DEPOIS da escolha dela. Sem isto o mesmo
+    // tênis e a mesma camiseta voltavam nas três — foi o que ela viu.
+    escolhidos = garantirPecasDiferentes(escolhidos, todos)
 
     outfit.primary = escolhidos[0] ?? outfit.primary
     outfit.alternatives = escolhidos.slice(1)

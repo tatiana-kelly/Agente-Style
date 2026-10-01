@@ -27,6 +27,11 @@ export interface EngineContext {
   /** Clima do dia: decide fórmula, camada e calçado. */
   clima?: 'calor' | 'ameno' | 'frio'
   /**
+   * Peça exigida no texto ("calça preta"): o papel só aceita o que casar.
+   * Restringe o papel, não trava um id — as três opções continuam variando.
+   */
+  exigencias?: Array<{ role: string; subcategories: string[]; color?: string; pattern?: string }>
+  /**
    * Semente da geração. Duas chamadas com sementes diferentes exploram partes
    * diferentes do guarda-roupa — é o que faz "Montar meu look" duas vezes
    * seguidas devolver coisas diferentes em vez do mesmo trio.
@@ -92,6 +97,22 @@ const TIER_TOLERANCE = [0, 1, 2, 4, 10]
 function isUsable(item: WardrobeItem, ctx: EngineContext, tier: number): boolean {
   if (!item.active) return false
   if (ctx.excludeIds.includes(item.id)) return false
+
+  // Exigência do pedido vale antes de qualquer gosto: "calça preta" quer
+  // dizer que a parte de baixo É uma calça preta, em todas as opções.
+  const exigencia = ctx.exigencias?.find((e) => e.role === item.category)
+  if (exigencia) {
+    if (!exigencia.subcategories.includes(item.subcategory)) return false
+    if (exigencia.color) {
+      const cor = normalizeColor(item.color)
+      if (!(cor === exigencia.color || cor.startsWith(exigencia.color) || exigencia.color.startsWith(cor))) return false
+    }
+    if (exigencia.pattern && item.pattern !== exigencia.pattern) return false
+    // Ela pediu ESTA peça: a faixa de formalidade do estilo não pode recusá-la
+    // ("calça de alfaiataria é formal demais para dia a dia" não é resposta).
+    // As regras de coerência continuam cuidando do conjunto.
+    return true
+  }
 
   const rule = ruleFor(ctx.style)
   const tolerance = TIER_TOLERANCE[Math.min(tier, TIER_TOLERANCE.length) - 1] ?? 10
@@ -201,7 +222,10 @@ function candidatesForSlot(
     if ((item.category as OutfitRole) !== slot.role) continue
     if (!isUsable(item, ctx, tier)) continue
     // Peça que briga com o clima não entra nem como opcional.
-    if (!pecaCombinaComClima(item, ctx.clima) && !(ctx.lockedExplicitIds ?? []).includes(item.id)) continue
+    const pedidaPorEla =
+      (ctx.lockedExplicitIds ?? []).includes(item.id) ||
+      Boolean(ctx.exigencias?.some((e) => e.role === item.category))
+    if (!pecaCombinaComClima(item, ctx.clima) && !pedidaPorEla) continue
 
     const affinity = slotAffinity(item, slot.archetypes)
     // Tier 1 e 2 exigem o arquétipo; a partir do Tier 3 qualquer peça do papel serve.
@@ -320,10 +344,12 @@ function buildFromFormula(
     )
     const variantes = [completo]
 
-    // A versão sem terceira peça não pode descartar o que ela travou.
+    // A versão sem terceira peça não pode descartar o que ela travou nem o
+    // que ela pediu por escrito ("blazer caramelo").
     const travadas = new Set(locked.map((i) => i.id))
     const terceiraTravada = completo.some((x) => x.role === 'outerwear' && travadas.has(x.item.id))
-    if (!exigeSobreposicao && !terceiraTravada && completo.some((x) => x.role === 'outerwear')) {
+    const terceiraPedida = Boolean(ctx.exigencias?.some((e) => e.role === 'outerwear'))
+    if (!exigeSobreposicao && !terceiraTravada && !terceiraPedida && completo.some((x) => x.role === 'outerwear')) {
       const semTerceira = completo.filter((x) => x.role !== 'outerwear')
       if (coversBody(semTerceira)) variantes.push(semTerceira)
     }
@@ -331,13 +357,20 @@ function buildFromFormula(
     return variantes.map((withExtras) => ({ ...p, withExtras }))
   })
 
+  // Papel que ela pediu por escrito tem de estar no look: pedir "blazer
+  // caramelo" e receber look sem blazer não é resposta.
+  const papeisPedidos = new Set((ctx.exigencias ?? []).map((e) => e.role))
   const coerentes = montados.filter(
     ({ withExtras }) =>
+      [...papeisPedidos].every((role) => withExtras.some((x) => x.role === role)) &&
       avaliarCoerencia(withExtras, { tier, formula, clima: ctx.clima }).length === 0 &&
       paletaDaFormulaOk(withExtras, formula, tier) &&
       (tier >= 4 || avaliarPaleta(withExtras).aprovada) &&
       travaDeCorOk(withExtras, formula) &&
-      climaOk(withExtras, ctx.clima, tier, explicitas),
+      climaOk(withExtras, ctx.clima, tier, new Set([
+        ...explicitas,
+        ...withExtras.filter((x) => papeisPedidos.has(x.role)).map((x) => x.item.id),
+      ])),
   )
   if (coerentes.length === 0) return []
 
